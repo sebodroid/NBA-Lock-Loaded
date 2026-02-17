@@ -86,40 +86,40 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| AUTH-01 | — | Pending |
-| AUTH-02 | — | Pending |
-| AUTH-03 | — | Pending |
-| AUTH-04 | — | Pending |
-| TEAM-01 | — | Pending |
-| TEAM-02 | — | Pending |
-| TEAM-03 | — | Pending |
-| TEAM-04 | — | Pending |
-| TEAM-05 | — | Pending |
-| TEAM-06 | — | Pending |
-| TEAM-07 | — | Pending |
-| GRID-01 | — | Pending |
-| GRID-02 | — | Pending |
-| GRID-03 | — | Pending |
-| GRID-04 | — | Pending |
-| GRID-05 | — | Pending |
-| GRID-06 | — | Pending |
-| PANEL-01 | — | Pending |
-| PANEL-02 | — | Pending |
-| PANEL-03 | — | Pending |
-| PANEL-04 | — | Pending |
-| PANEL-05 | — | Pending |
-| DATA-01 | — | Pending |
-| DATA-02 | — | Pending |
-| DATA-03 | — | Pending |
-| DATA-04 | — | Pending |
-| DATA-05 | — | Pending |
-| DATA-06 | — | Pending |
+| AUTH-01 | Phase 3 | Pending |
+| AUTH-02 | Phase 3 | Pending |
+| AUTH-03 | Phase 3 | Pending |
+| AUTH-04 | Phase 3 | Pending |
+| TEAM-01 | Phase 4 | Pending |
+| TEAM-02 | Phase 4 | Pending |
+| TEAM-03 | Phase 4 | Pending |
+| TEAM-04 | Phase 4 | Pending |
+| TEAM-05 | Phase 4 | Pending |
+| TEAM-06 | Phase 4 | Pending |
+| TEAM-07 | Phase 4 | Pending |
+| GRID-01 | Phase 4 | Pending |
+| GRID-02 | Phase 4 | Pending |
+| GRID-03 | Phase 4 | Pending |
+| GRID-04 | Phase 4 | Pending |
+| GRID-05 | Phase 4 | Pending |
+| GRID-06 | Phase 4 | Pending |
+| PANEL-01 | Phase 4 | Pending |
+| PANEL-02 | Phase 4 | Pending |
+| PANEL-03 | Phase 4 | Pending |
+| PANEL-04 | Phase 4 | Pending |
+| PANEL-05 | Phase 4 | Pending |
+| DATA-01 | Phase 2 | Pending |
+| DATA-02 | Phase 2 | Pending |
+| DATA-03 | Phase 2 | Pending |
+| DATA-04 | Phase 2 | Pending |
+| DATA-05 | Phase 2 | Pending |
+| DATA-06 | Phase 2 | Pending |
 
 **Coverage:**
 - v1 requirements: 28 total
-- Mapped to phases: 0 (populated during roadmap)
-- Unmapped: 28 ⚠️
+- Mapped to phases: 28
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-02-17*
-*Last updated: 2026-02-17 after initial definition*
+*Last updated: 2026-02-17 after roadmap creation*
