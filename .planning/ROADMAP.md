@@ -29,11 +29,11 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. EF Core migrations apply cleanly to both local PostgreSQL and Aiven, producing the full schema (Teams, Games, GameLines, GameResults, Users, RefreshTokens, SyncRuns)
   3. The shared `NbaTracker.Data` project is referenced by both the API and Worker projects and compiles without errors
   4. Secrets (API keys, DB connection string, JWT secret) are loaded from `.env` and never committed to source control
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 01-01: Docker Compose scaffold with four containers and health checks
-- [ ] 01-02: PostgreSQL schema and EF Core migrations (shared Data project)
+- [ ] 01-01-PLAN.md — .NET solution scaffold, four-container Docker Compose with health checks, Dockerfiles, and secrets baseline
+- [ ] 01-02-PLAN.md — NbaTracker.Data entity classes, DbContext, EF Core migrations applied to local PostgreSQL and Aiven
 
 ### Phase 2: Ingestion Worker
 **Goal**: Real NBA game data and betting lines are in the database with verified ATS/O/U calculations, refreshed daily
