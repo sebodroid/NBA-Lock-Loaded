@@ -32,7 +32,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans**: 2 plans
 
 Plans:
-- [ ] 01-01-PLAN.md — .NET solution scaffold, four-container Docker Compose with health checks, Dockerfiles, and secrets baseline
+- [x] 01-01-PLAN.md — .NET solution scaffold, four-container Docker Compose with health checks, Dockerfiles, and secrets baseline
 - [ ] 01-02-PLAN.md — NbaTracker.Data entity classes, DbContext, EF Core migrations applied to local PostgreSQL and Aiven
 
 ### Phase 2: Ingestion Worker
@@ -109,7 +109,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation | 0/2 | Not started | - |
+| 1. Foundation | 1/2 | In Progress | - |
 | 2. Ingestion Worker | 0/4 | Not started | - |
 | 3. REST API | 0/2 | Not started | - |
 | 4. React Frontend | 0/4 | Not started | - |
