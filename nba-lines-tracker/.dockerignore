@@ -1,0 +1,17 @@
+# Exclude build output from Docker build context.
+# Without this, obj/project.assets.json from the Windows host (which may reference
+# Visual Studio fallback package folders like C:\Program Files (x86)\Microsoft Visual Studio\Shared\NuGetPackages)
+# would be copied into the container and cause dotnet restore/publish to fail.
+**/bin/
+**/obj/
+
+# Node modules and frontend build output
+**/node_modules/
+frontend/dist/
+
+# Secrets
+.env
+
+# OS artifacts
+.DS_Store
+Thumbs.db
