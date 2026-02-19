@@ -15,4 +15,6 @@ RUN dotnet publish -c Release -o /app --no-restore
 FROM mcr.microsoft.com/dotnet/runtime:9.0
 WORKDIR /app
 COPY --from=build /app ./
+# Install tzdata so IANA timezone IDs (America/New_York) work in Linux container
+RUN apt-get update && apt-get install -y --no-install-recommends tzdata && rm -rf /var/lib/apt/lists/*
 ENTRYPOINT ["dotnet", "NbaTracker.Worker.dll"]
