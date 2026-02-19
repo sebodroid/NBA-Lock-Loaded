@@ -45,13 +45,13 @@ Plans:
   3. Admin can query `/api/admin/sync-status` and see last run time, success/failure status, and error details
   4. Running the one-time backfill command populates the database with all completed 2024-25 season games and their resolved lines
   5. A sync failure (network error, API timeout) does not corrupt existing data and is recorded with full error details in `sync_runs`
-**Plans**: TBD
+**Plans**: 4 plans
 
 Plans:
-- [ ] 02-01: BallDontLie API client and game schedule/score ingestion
-- [ ] 02-02: The Odds API client and betting lines ingestion with canonical sportsbook selection
-- [ ] 02-03: ATS/O/U result calculation engine and cross-API game matching service
-- [ ] 02-04: Daily scheduler, sync observability (sync_runs table), and historical backfill
+- [ ] 02-01-PLAN.md — BallDontLie typed HttpClient with cursor-based pagination, DTOs, and 3-retry resilience
+- [ ] 02-02-PLAN.md — The Odds API typed HttpClient, line DTOs, canonical bookmaker selection (FanDuel primary, HardRock fallback)
+- [ ] 02-03-PLAN.md — ATS/O/U calculation engine and cross-API game matching service (TDD with xUnit)
+- [ ] 02-04-PLAN.md — SyncOrchestrator full pipeline, Cronos 5am ET scheduler, gap detection, backfill mode, SyncRun observability
 
 ### Phase 3: REST API
 **Goal**: Users and admins can authenticate, and all team stats endpoints return real data from the database
