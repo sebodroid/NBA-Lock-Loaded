@@ -7,6 +7,14 @@ using Polly;
 
 var builder = Host.CreateApplicationBuilder(args);
 
+// Parse backfill flag: --backfill arg or BACKFILL=true env var
+bool isBackfill = args.Contains("--backfill") ||
+    builder.Configuration["BACKFILL"]?.Equals("true", StringComparison.OrdinalIgnoreCase) == true;
+builder.Services.AddSingleton(new SyncOptions { IsBackfill = isBackfill });
+
+// Register SyncOrchestrator as Scoped (resolved per sync run scope in Worker)
+builder.Services.AddScoped<SyncOrchestrator>();
+
 // Register DbContext to validate the project reference compiles and connects
 builder.Services.AddDbContext<NbaTrackerDbContext>(options =>
     options.UseNpgsql(
