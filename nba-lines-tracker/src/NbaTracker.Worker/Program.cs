@@ -31,6 +31,23 @@ builder.Services.AddHttpClient<BallDontLieClient>(client =>
     pipeline.AddTimeout(TimeSpan.FromSeconds(30));
 });
 
+// The Odds API client — NBA betting lines (spreads, totals) from FanDuel / HardRock
+builder.Services.AddHttpClient<OddsApiClient>(client =>
+{
+    client.BaseAddress = new Uri("https://api.the-odds-api.com/");
+})
+.AddResilienceHandler("OddsApiRetry", pipeline =>
+{
+    pipeline.AddRetry(new HttpRetryStrategyOptions
+    {
+        MaxRetryAttempts = 3,
+        BackoffType = DelayBackoffType.Exponential,
+        UseJitter = true,
+        Delay = TimeSpan.FromSeconds(2)
+    });
+    pipeline.AddTimeout(TimeSpan.FromSeconds(30));
+});
+
 builder.Services.AddHostedService<Worker>();
 
 var host = builder.Build();
