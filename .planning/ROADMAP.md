@@ -63,11 +63,11 @@ Plans:
   3. The refresh token endpoint issues a new access token without requiring re-login
   4. An admin can POST to `/api/admin/users` to create a new user account; the endpoint is blocked for non-admin roles
   5. All team stats endpoints (`/api/teams`, `/api/teams/{id}/stats`, `/api/teams/{id}/games`) return correctly structured JSON populated from real database records
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 03-01: JWT auth endpoints (login, refresh, logout) and admin user creation
-- [ ] 03-02: Team stats endpoints (aggregate stats, game log, home/away splits)
+- [ ] 03-01-PLAN.md — Email migration, JWT bearer middleware, auth endpoints (login/refresh/logout), admin user creation, admin seed, sync-status endpoint
+- [ ] 03-02-PLAN.md — Team stats endpoints: GET /api/teams, GET /api/teams/{id}/stats (home/away splits), GET /api/teams/{id}/games (game log)
 
 ### Phase 4: React Frontend
 **Goal**: Authenticated users can view all team betting performance data, compare teams side by side, and customize their view
