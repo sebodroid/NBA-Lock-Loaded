@@ -110,4 +110,7 @@ AuthEndpoints.Map(api.MapGroup("/auth"));
 // Admin endpoints — AdminOnly policy gates the entire group
 AdminEndpoints.Map(api.MapGroup("/admin").RequireAuthorization("AdminOnly"));
 
+// Team endpoints — any authenticated user (not admin-restricted)
+TeamEndpoints.Map(api.MapGroup("/teams").RequireAuthorization());
+
 app.Run();
