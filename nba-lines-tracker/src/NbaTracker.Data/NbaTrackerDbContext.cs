@@ -69,5 +69,9 @@ public class NbaTrackerDbContext : DbContext
         modelBuilder.Entity<RefreshToken>()
             .HasIndex(r => r.TokenHash)
             .IsUnique();
+
+        modelBuilder.Entity<User>()
+            .HasIndex(u => u.Email)
+            .IsUnique();
     }
 }
