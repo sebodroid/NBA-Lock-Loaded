@@ -28,6 +28,14 @@ public static class TeamEndpoints
             .Include(g => g.GameResult)
             .ToListAsync(ct);
 
+        // Fetch the most recent completed SyncRun timestamp (once, shared across all teams)
+        var lastSync = await db.SyncRuns
+            .Where(r => r.CompletedAt != null)
+            .OrderByDescending(r => r.CompletedAt)
+            .Select(r => r.CompletedAt)
+            .FirstOrDefaultAsync(ct);
+        string? lastSyncedAt = lastSync?.ToString("O");  // ISO 8601 round-trip format
+
         var stats = teams.Select(team =>
         {
             // Partition once per team — avoids repeated full-scan over finalGames
@@ -55,12 +63,38 @@ public static class TeamEndpoints
             int ouUnders = allGames.Count(g => g.GameResult?.OuResult == OuResult.Under);
             int ouPushes = allGames.Count(g => g.GameResult?.OuResult == OuResult.Push);
 
+            // Compute streak: walk all team games sorted descending by GameDate
+            var allTeamGames = homeGames.Concat(awayGames)
+                .OrderByDescending(g => g.GameDate)
+                .ToList();
+
+            int streak = 0;
+            if (allTeamGames.Count > 0)
+            {
+                // Determine win/loss for most recent game
+                var first = allTeamGames[0];
+                bool firstWon = (first.HomeTeamId == team.Id && first.HomeScore > first.AwayScore)
+                             || (first.AwayTeamId == team.Id && first.AwayScore > first.HomeScore);
+
+                // Walk games counting consecutive same result — stop at first different result
+                foreach (var g in allTeamGames)
+                {
+                    bool won = (g.HomeTeamId == team.Id && g.HomeScore > g.AwayScore)
+                            || (g.AwayTeamId == team.Id && g.AwayScore > g.HomeScore);
+                    if (won == firstWon)
+                        streak += firstWon ? 1 : -1;
+                    else
+                        break;
+                }
+            }
+
             return new TeamStatsResponse(
                 team.Id, team.Name, team.Abbreviation, team.Conference, team.Division,
                 homeGames.Count + awayGames.Count,
                 wins, losses,
                 atsCovers, atsLosses, atsPushes,
-                ouOvers, ouUnders, ouPushes
+                ouOvers, ouUnders, ouPushes,
+                streak, lastSyncedAt
             );
         }).ToList();
 

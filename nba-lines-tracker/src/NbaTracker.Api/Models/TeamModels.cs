@@ -14,7 +14,9 @@ public record TeamStatsResponse(
     int AtsPushes,
     int OuOvers,
     int OuUnders,
-    int OuPushes
+    int OuPushes,
+    int Streak,
+    string? LastSyncedAt
 );
 
 public record HomeAwaySplit(
