@@ -9,19 +9,19 @@ See: .planning/PROJECT.md (updated 2026-02-17)
 
 ## Current Position
 
-Phase: 2 of 5 (Data Sync) — COMPLETE
-Plan: 04-complete
-Status: Phase 2 fully complete (02-01 BDL client, 02-02 Odds API client, 02-03 ATS/OU calculator, 02-04 SyncOrchestrator + Worker scheduler)
-Last activity: 2026-02-19 — Completed Plan 02-04: SyncOrchestrator, Cronos 5am ET scheduler, gap detection, backfill mode, tzdata Docker fix
+Phase: 3 of 5 (REST API) — IN PROGRESS
+Plan: 01-complete (of unknown total)
+Status: Phase 3 Plan 01 complete — JWT auth endpoints, admin seed, email migration all working
+Last activity: 2026-02-20 — Completed Plan 03-01: JWT bearer auth, BCrypt refresh tokens, auth/admin endpoints, admin seed, Email migration
 
 Progress: [████░░░░░░] 40%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 6
-- Average duration: ~19 min
-- Total execution time: ~1.9 hours
+- Total plans completed: 7
+- Average duration: ~24 min
+- Total execution time: ~2.9 hours
 
 **By Phase:**
 
@@ -29,10 +29,11 @@ Progress: [████░░░░░░] 40%
 |-------|-------|-------|----------|
 | 01-foundation | 2/2 | 36 min | 18 min |
 | 02-ingestion-worker | 4/4 | ~79 min | ~20 min |
+| 03-rest-api | 1/? | 61 min | 61 min |
 
 **Recent Trend:**
-- Last 5 plans: 30 min, ~18 min, ~18 min, 18 min, 25 min
-- Trend: consistent ~18-25 min/plan
+- Last 5 plans: ~18 min, ~18 min, 18 min, 25 min, 61 min
+- Trend: 03-01 took longer due to Docker debugging and JWT config fix
 
 *Updated after each plan completion*
 
@@ -65,6 +66,13 @@ Recent decisions affecting current work:
 - 02-04: Per-game SaveChangesAsync — no giant transaction, so partial success is safe
 - 02-04: IServiceScopeFactory per sync run — scoped DbContext resolved safely from singleton BackgroundService
 - 02-04: Season from date: month >= 10 => year, else year - 1 (handles Jan-Sep cross-year games)
+- 03-01: ASP.NET Core env var config key mapping: JWT__Secret env var becomes JWT:Secret config key via __ separator; use config["JWT:Secret"] not config["JWT__Secret"]
+- 03-01: BCrypt timing-safe login: always call BCrypt.Verify even when user not found (with dummy hash) to prevent timing-based email enumeration
+- 03-01: Refresh token BCrypt hash storage: plaintext returned to client once, TokenHash in DB stores BCrypt hash; candidates fetched by time window and verified in memory (cannot query by hash)
+- 03-01: Token rotation: old refresh token RevokedAt set before new token issued — prevents replay attacks
+- 03-01: ClockSkew = TimeSpan.Zero: 15-minute access tokens expire exactly on time, no default 5-minute leeway
+- 03-01: Admin seed runs only in Development environment — requires ASPNETCORE_ENVIRONMENT=Development in .env for local Docker
+- 03-01: Route group auth gating: api.MapGroup("/admin").RequireAuthorization("AdminOnly") — no per-endpoint auth needed
 
 ### Pending Todos
 
@@ -78,9 +86,10 @@ None yet.
 - Local dev: `dotnet ef database update` from Windows host cannot connect to Docker PostgreSQL via TCP (WSL2 NAT + SCRAM auth). Use SQL script + docker exec approach for future local migrations.
 - 02-Worker: MSB3277 warnings about EF Core version conflict (9.0.1 vs 9.0.13) in NbaTracker.Worker — pre-existing, build succeeds with 0 errors, safe to ignore until NuGet cache refreshes
 - 02-04: HardRock fallback bookmaker key 'hardrockbet' LOW confidence — validate against debug logs on first real run
+- 03-01: pgdata Docker volume retains old user passwords across container recreations — if password changes, run ALTER USER via docker compose exec to sync
 
 ## Session Continuity
 
-Last session: 2026-02-19
-Stopped at: Completed 02-04-PLAN.md — SyncOrchestrator, Cronos 5am ET scheduler, gap detection, backfill mode, tzdata Docker fix. Phase 2 complete.
-Resume file: .planning/phases/03-api-layer/ (Phase 3 plans to be created)
+Last session: 2026-02-20
+Stopped at: Completed 03-01-PLAN.md — JWT bearer auth, BCrypt refresh token rotation, auth/admin endpoints, admin seed, Email migration. AUTH-01 through AUTH-04 satisfied.
+Resume file: .planning/phases/03-rest-api/ (next plan TBD)
