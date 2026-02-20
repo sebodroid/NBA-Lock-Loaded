@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-02-17)
 
 **Core value:** At a glance, see which NBA teams cover the spread and hit the over/under most reliably
-**Current focus:** Phase 3 — API Layer
+**Current focus:** Phase 4 — Frontend
 
 ## Current Position
 
-Phase: 3 of 5 (REST API) — IN PROGRESS
-Plan: 01-complete (of unknown total)
-Status: Phase 3 Plan 01 complete — JWT auth endpoints, admin seed, email migration all working
-Last activity: 2026-02-20 — Completed Plan 03-01: JWT bearer auth, BCrypt refresh tokens, auth/admin endpoints, admin seed, Email migration
+Phase: 3 of 5 (REST API) — COMPLETE
+Plan: 02-complete (of 2 total)
+Status: Phase 3 complete — all five ROADMAP success criteria satisfied. Auth endpoints, admin endpoints, and team stats endpoints all working.
+Last activity: 2026-02-19 — Completed Plan 03-02: Team stats endpoints (GET /api/teams, /api/teams/{id}/stats, /api/teams/{id}/games)
 
-Progress: [████░░░░░░] 40%
+Progress: [██████░░░░] 60%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 7
-- Average duration: ~24 min
-- Total execution time: ~2.9 hours
+- Total plans completed: 8
+- Average duration: ~23 min
+- Total execution time: ~3.1 hours
 
 **By Phase:**
 
@@ -29,11 +29,11 @@ Progress: [████░░░░░░] 40%
 |-------|-------|-------|----------|
 | 01-foundation | 2/2 | 36 min | 18 min |
 | 02-ingestion-worker | 4/4 | ~79 min | ~20 min |
-| 03-rest-api | 1/? | 61 min | 61 min |
+| 03-rest-api | 2/2 | ~76 min | ~38 min |
 
 **Recent Trend:**
-- Last 5 plans: ~18 min, ~18 min, 18 min, 25 min, 61 min
-- Trend: 03-01 took longer due to Docker debugging and JWT config fix
+- Last 5 plans: ~18 min, ~18 min, 25 min, 61 min, 15 min
+- Trend: 03-02 was fast (single task, clean implementation)
 
 *Updated after each plan completion*
 
@@ -73,6 +73,8 @@ Recent decisions affecting current work:
 - 03-01: ClockSkew = TimeSpan.Zero: 15-minute access tokens expire exactly on time, no default 5-minute leeway
 - 03-01: Admin seed runs only in Development environment — requires ASPNETCORE_ENVIRONMENT=Development in .env for local Docker
 - 03-01: Route group auth gating: api.MapGroup("/admin").RequireAuthorization("AdminOnly") — no per-endpoint auth needed
+- [Phase 03-rest-api]: Enum comparisons for AtsResult/OuResult must happen in C# after ToListAsync — HasConversion<string>() prevents EF Core from translating enum == comparisons to SQL
+- [Phase 03-rest-api]: GET /api/teams loads all FINAL games in one bulk query and partitions in C# per team — avoids 30 separate DB queries, acceptable at ~2,460 rows max
 
 ### Pending Todos
 
@@ -90,6 +92,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-20
-Stopped at: Completed 03-01-PLAN.md — JWT bearer auth, BCrypt refresh token rotation, auth/admin endpoints, admin seed, Email migration. AUTH-01 through AUTH-04 satisfied.
-Resume file: .planning/phases/03-rest-api/ (next plan TBD)
+Last session: 2026-02-19
+Stopped at: Completed 03-02-PLAN.md — team stats endpoints, Phase 3 complete.
+Resume file: .planning/phases/04-frontend/ (Phase 4 next)
