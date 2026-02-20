@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-02-17)
 ## Current Position
 
 Phase: 4 of 5 (React Frontend) — IN PROGRESS
-Plan: 01-complete (of 4 total)
-Status: Plan 04-01 complete — backend Streak/LastSyncedAt fields added, full frontend scaffold with auth, routing, and utility layers.
-Last activity: 2026-02-20 — Completed Plan 04-01: App foundation (Tailwind v4, shadcn/ui, JWT auth layer, Zustand store, React Router, login page)
+Plan: 02-complete (of 4 total)
+Status: Plan 04-02 complete — TanStack Table team grid with AtsCell, GridToolbar, column visibility, localStorage persistence.
+Last activity: 2026-02-20 — Completed Plan 04-02: Team grid (TanStack Table v8, ATS%/O/U% color cells, conference/division filters, column visibility toggle)
 
-Progress: [███████░░░] 65%
+Progress: [████████░░] 70%
 
 ## Performance Metrics
 
@@ -30,11 +30,11 @@ Progress: [███████░░░] 65%
 | 01-foundation | 2/2 | 36 min | 18 min |
 | 02-ingestion-worker | 4/4 | ~79 min | ~20 min |
 | 03-rest-api | 2/2 | ~76 min | ~38 min |
-| 04-react-frontend | 1/4 | ~5 min | ~5 min |
+| 04-react-frontend | 2/4 | ~17 min | ~8.5 min |
 
 **Recent Trend:**
 - Last 5 plans: ~18 min, 25 min, 61 min, 15 min, 5 min
-- Trend: 04-01 very fast (3 tasks, mostly writes + 1 interactive npm install)
+- Trend: 04-01 very fast (3 tasks, mostly writes); 04-02 fast (2 tasks, 4 files, 0 deviations)
 
 *Updated after each plan completion*
 
@@ -80,6 +80,8 @@ Recent decisions affecting current work:
 - 04-01: Axios 401 interceptor with in-flight queue — isRefreshing flag + failedQueue array prevents thundering herd on token expiry
 - 04-01: Zustand partialize: only theme persisted, auth state reset on reload and restored via tryRestoreSession useEffect
 - 04-01: shadcn init with Tailwind v4 requires pre-existing index.css with @import "tailwindcss" — shadcn detects v4 and writes oklch CSS variables
+- [Phase 04-react-frontend]: Pre-filter data before TanStack Table for conference/division — avoids dual-filter row model issues
+- [Phase 04-react-frontend]: teamColumns has 9 entries: 7 visible + 2 hidden; team column has enableHiding: false
 
 ### Pending Todos
 
@@ -98,5 +100,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-20
-Stopped at: Completed 04-01-PLAN.md — app foundation, Tailwind v4 + shadcn/ui, JWT auth layer, React Router, login page.
-Resume file: .planning/phases/04-react-frontend/04-02-PLAN.md (team grid component)
+Stopped at: Completed 04-02-PLAN.md — team grid with TanStack Table, AtsCell, GridToolbar, column visibility persisted to localStorage.
+Resume file: .planning/phases/04-react-frontend/04-03-PLAN.md (main page layout)
