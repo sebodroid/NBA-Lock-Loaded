@@ -1,13 +1,9 @@
 import { useEffect, useState } from 'react'
 import { createBrowserRouter, RouterProvider, Navigate, Outlet } from 'react-router-dom'
 import { LoginPage } from '@/components/auth/LoginPage'
+import { MainPage } from '@/components/layout/MainPage'
 import { useAppStore } from '@/store/useAppStore'
 import { tryRestoreSession } from '@/api/auth'
-
-// Placeholder — replaced in Plan 04-02
-function MainPage() {
-  return <div className="p-8"><h1 className="text-xl font-semibold">Loading team data...</h1></div>
-}
 
 function ProtectedRoute() {
   const isAuthenticated = useAppStore(s => s.isAuthenticated)
