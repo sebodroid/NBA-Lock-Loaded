@@ -9,12 +9,12 @@ See: .planning/PROJECT.md (updated 2026-02-17)
 
 ## Current Position
 
-Phase: 3 of 5 (REST API) — COMPLETE
-Plan: 02-complete (of 2 total)
-Status: Phase 3 complete — all five ROADMAP success criteria satisfied. Auth endpoints, admin endpoints, and team stats endpoints all working.
-Last activity: 2026-02-19 — Completed Plan 03-02: Team stats endpoints (GET /api/teams, /api/teams/{id}/stats, /api/teams/{id}/games)
+Phase: 4 of 5 (React Frontend) — IN PROGRESS
+Plan: 01-complete (of 4 total)
+Status: Plan 04-01 complete — backend Streak/LastSyncedAt fields added, full frontend scaffold with auth, routing, and utility layers.
+Last activity: 2026-02-20 — Completed Plan 04-01: App foundation (Tailwind v4, shadcn/ui, JWT auth layer, Zustand store, React Router, login page)
 
-Progress: [██████░░░░] 60%
+Progress: [███████░░░] 65%
 
 ## Performance Metrics
 
@@ -30,10 +30,11 @@ Progress: [██████░░░░] 60%
 | 01-foundation | 2/2 | 36 min | 18 min |
 | 02-ingestion-worker | 4/4 | ~79 min | ~20 min |
 | 03-rest-api | 2/2 | ~76 min | ~38 min |
+| 04-react-frontend | 1/4 | ~5 min | ~5 min |
 
 **Recent Trend:**
-- Last 5 plans: ~18 min, ~18 min, 25 min, 61 min, 15 min
-- Trend: 03-02 was fast (single task, clean implementation)
+- Last 5 plans: ~18 min, 25 min, 61 min, 15 min, 5 min
+- Trend: 04-01 very fast (3 tasks, mostly writes + 1 interactive npm install)
 
 *Updated after each plan completion*
 
@@ -75,6 +76,10 @@ Recent decisions affecting current work:
 - 03-01: Route group auth gating: api.MapGroup("/admin").RequireAuthorization("AdminOnly") — no per-endpoint auth needed
 - [Phase 03-rest-api]: Enum comparisons for AtsResult/OuResult must happen in C# after ToListAsync — HasConversion<string>() prevents EF Core from translating enum == comparisons to SQL
 - [Phase 03-rest-api]: GET /api/teams loads all FINAL games in one bulk query and partitions in C# per team — avoids 30 separate DB queries, acceptable at ~2,460 rows max
+- 04-01: Access token in module memory (not localStorage) for XSS mitigation; refresh token in localStorage for persistence across page reloads
+- 04-01: Axios 401 interceptor with in-flight queue — isRefreshing flag + failedQueue array prevents thundering herd on token expiry
+- 04-01: Zustand partialize: only theme persisted, auth state reset on reload and restored via tryRestoreSession useEffect
+- 04-01: shadcn init with Tailwind v4 requires pre-existing index.css with @import "tailwindcss" — shadcn detects v4 and writes oklch CSS variables
 
 ### Pending Todos
 
@@ -92,6 +97,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-19
-Stopped at: Completed 03-02-PLAN.md — team stats endpoints, Phase 3 complete.
-Resume file: .planning/phases/04-frontend/ (Phase 4 next)
+Last session: 2026-02-20
+Stopped at: Completed 04-01-PLAN.md — app foundation, Tailwind v4 + shadcn/ui, JWT auth layer, React Router, login page.
+Resume file: .planning/phases/04-react-frontend/04-02-PLAN.md (team grid component)
