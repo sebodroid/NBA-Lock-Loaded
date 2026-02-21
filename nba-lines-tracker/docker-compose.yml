@@ -37,6 +37,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    volumes:
+      - worker_logs:/logs
 
   frontend:
     build:
@@ -47,3 +49,4 @@ services:
 
 volumes:
   pgdata:
+  worker_logs:

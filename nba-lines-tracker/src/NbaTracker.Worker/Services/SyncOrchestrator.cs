@@ -14,6 +14,7 @@ public class SyncOrchestrator
     private readonly OddsApiClient _oddsClient;
     private readonly IConfiguration _config;
     private readonly ILogger<SyncOrchestrator> _logger;
+    private readonly SyncFileLogger _fileLogger;
 
     private static readonly TimeZoneInfo EasternTime = GameMatchingService.GetEasternTimeZone();
 
@@ -22,18 +23,21 @@ public class SyncOrchestrator
         BallDontLieClient bdlClient,
         OddsApiClient oddsClient,
         IConfiguration config,
-        ILogger<SyncOrchestrator> logger)
+        ILogger<SyncOrchestrator> logger,
+        SyncFileLogger fileLogger)
     {
         _db = db;
         _bdlClient = bdlClient;
         _oddsClient = oddsClient;
         _config = config;
         _logger = logger;
+        _fileLogger = fileLogger;
     }
 
     public async Task RunDailySyncAsync(DateOnly date, CancellationToken ct)
     {
         _logger.LogInformation("Starting daily sync for {Date}", date);
+        _fileLogger.LogSyncStart(date);
 
         var syncRun = new SyncRun
         {
@@ -65,16 +69,25 @@ public class SyncOrchestrator
                     await UpsertGameAsync(bdlGame, ct);
                     await _db.SaveChangesAsync(ct);
                     gamesProcessed++;
+                    var gameStatus = bdlGame.Postponed ? "POSTPONED"
+                        : bdlGame.Status == "Final" ? "FINAL"
+                        : (bdlGame.Status.Contains('Q') || bdlGame.Status.Contains("Halftime")) ? "LIVE"
+                        : "SCHEDULED";
+                    _fileLogger.LogGameWriteOk(date, bdlGame.Id.ToString(), gameStatus);
                 }
                 catch (Exception ex)
                 {
                     _logger.LogWarning(ex, "Failed to upsert BDL game {GameId}", bdlGame.Id);
                     errors.Add($"BDL game {bdlGame.Id}: {ex.Message}");
+                    _fileLogger.LogGameWriteFail(date, bdlGame.Id.ToString(), ex.Message);
                 }
             }
 
-            // Step d: Fetch Odds API lines (single call for all NBA events)
-            var oddsEvents = await _oddsClient.GetOddsAsync(ct);
+            // Step d: Fetch Odds API lines — historical endpoint for past dates, live for today
+            var today = DateOnly.FromDateTime(DateTime.UtcNow);
+            var oddsEvents = date < today
+                ? await _oddsClient.GetHistoricalOddsAsync(date, ct)
+                : await _oddsClient.GetOddsAsync(ct);
             _logger.LogInformation("Fetched {Count} events from Odds API", oddsEvents.Count);
 
             // Build canonical key lookup from Odds API events
@@ -215,6 +228,8 @@ public class SyncOrchestrator
                     }
 
                     // Calculate ATS/OU for FINAL games with sufficient data
+                    bool resultCalculated = false;
+                    string logHomeAts = "", logAwayAts = "", logOu = "";
                     if (game.Status == "FINAL"
                         && game.GameLine.Spread.HasValue
                         && game.GameLine.Total.HasValue
@@ -257,14 +272,23 @@ public class SyncOrchestrator
                             game.GameResult.OuResult = ouResult;
                             game.GameResult.ResolvedAt = DateTime.UtcNow;
                         }
+
+                        resultCalculated = true;
+                        logHomeAts = homeAts.ToString();
+                        logAwayAts = awayAts.ToString();
+                        logOu = ouResult.ToString();
                     }
 
                     await _db.SaveChangesAsync(ct);
+                    _fileLogger.LogLineWriteOk(date, game.Id, game.GameLine.Spread, game.GameLine.Total, game.GameLine.Bookmaker);
+                    if (resultCalculated)
+                        _fileLogger.LogResultWriteOk(date, game.Id, logHomeAts, logAwayAts, logOu);
                 }
                 catch (Exception ex)
                 {
                     _logger.LogWarning(ex, "Failed to process lines for game {GameId}", game.Id);
                     errors.Add($"Lines for game {game.Id}: {ex.Message}");
+                    _fileLogger.LogLineWriteFail(date, game.Id, ex.Message);
                 }
             }
 
@@ -289,6 +313,12 @@ public class SyncOrchestrator
             _logger.LogInformation(
                 "Sync for {Date} completed: {Status}, {GamesProcessed} games processed, {ErrorCount} errors",
                 date, syncRun.Status, syncRun.GamesProcessed, errors.Count);
+            _fileLogger.LogSyncComplete(
+                date,
+                syncRun.Status.ToString(),
+                syncRun.GamesProcessed,
+                errors.Count,
+                syncRun.ErrorDetails);
         }
     }
 
@@ -304,7 +334,15 @@ public class SyncOrchestrator
         _logger.LogInformation("Teams table empty — seeding from BallDontLie");
         var bdlTeams = await _bdlClient.GetTeamsAsync(ct);
 
-        foreach (var bdlTeam in bdlTeams)
+        // Filter to current NBA teams only — BallDontLie returns all historical teams;
+        // active teams always have a valid conference (East or West)
+        var activeTeams = bdlTeams
+            .Where(t => t.Conference == "East" || t.Conference == "West")
+            .ToList();
+
+        _logger.LogInformation("Filtered to {Count} active teams (from {Total} total)", activeTeams.Count, bdlTeams.Count);
+
+        foreach (var bdlTeam in activeTeams)
         {
             var existing = await _db.Teams
                 .FirstOrDefaultAsync(t => t.NbaApiId == bdlTeam.Id.ToString(), ct);
@@ -332,7 +370,7 @@ public class SyncOrchestrator
         }
 
         await _db.SaveChangesAsync(ct);
-        _logger.LogInformation("Seeded {Count} teams", bdlTeams.Count);
+        _logger.LogInformation("Seeded {Count} teams", activeTeams.Count);
     }
 
     private async Task UpsertGameAsync(BdlGame bdlGame, CancellationToken ct)

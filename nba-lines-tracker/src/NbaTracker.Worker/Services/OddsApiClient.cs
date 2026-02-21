@@ -55,6 +55,32 @@ public class OddsApiClient
     }
 
     /// <summary>
+    /// Fetches historical pre-game spreads and totals for a past date.
+    /// Queries odds as they were at noon ET (17:00 UTC) on the given date —
+    /// early enough to capture pre-game lines for all tip-offs.
+    /// Requires a paid Odds API plan (Starter or above).
+    /// </summary>
+    public async Task<List<OddsApiEvent>> GetHistoricalOddsAsync(DateOnly date, CancellationToken ct)
+    {
+        // Query snapshot at 17:00 UTC (noon ET) — pre-game for all tip-offs that day
+        var snapshotTime = new DateTime(date.Year, date.Month, date.Day, 17, 0, 0, DateTimeKind.Utc);
+        var iso = snapshotTime.ToString("yyyy-MM-ddTHH:mm:ssZ");
+
+        var path = $"v4/historical/sports/basketball_nba/odds?regions=us&markets=spreads,totals" +
+                   $"&bookmakers={_primaryBookmaker},{_fallbackBookmaker}" +
+                   $"&date={iso}" +
+                   $"&apiKey={_apiKey}";
+
+        _logger.LogInformation("Fetching historical NBA odds for {Date} (snapshot: {Snapshot})", date, iso);
+
+        var response = await _http.GetFromJsonAsync<OddsApiHistoricalResponse>(path, ct)
+            ?? throw new InvalidOperationException($"The Odds API returned null for historical odds on {date}.");
+
+        _logger.LogInformation("Fetched {Count} historical events for {Date}", response.Data.Count, date);
+        return response.Data;
+    }
+
+    /// <summary>
     /// Fetches completed game scores for recent games.
     /// daysFrom: 1 to 3 (The Odds API maximum is 3 days back).
     /// </summary>
@@ -96,7 +122,7 @@ public class OddsApiClient
     {
         var favorite = spreadsMarket.Outcomes.MinBy(o => o.Point ?? 0)!;
         var underdog = spreadsMarket.Outcomes.First(o => o.Name != favorite.Name);
-        return (Math.Abs(favorite.Point!.Value), favorite.Name, favorite.Price, underdog.Price);
+        return (Math.Abs(favorite.Point!.Value), favorite.Name, (int)Math.Round(favorite.Price), (int)Math.Round(underdog.Price));
     }
 
     /// <summary>
@@ -107,6 +133,6 @@ public class OddsApiClient
     {
         var over = totalsMarket.Outcomes.First(o => o.Name == "Over");
         var under = totalsMarket.Outcomes.First(o => o.Name == "Under");
-        return (over.Point!.Value, over.Price, under.Price);
+        return (over.Point!.Value, (int)Math.Round(over.Price), (int)Math.Round(under.Price));
     }
 }

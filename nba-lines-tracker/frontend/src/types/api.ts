@@ -67,6 +67,6 @@ export function calcOuPct(stats: { ouOvers: number; ouUnders: number }): number 
 }
 
 export function formatStreak(streak: number): string {
-  if (streak === 0) return '\u2013'
+  if (!streak || !isFinite(streak)) return '\u2013'
   return streak > 0 ? `W${streak}` : `L${Math.abs(streak)}`
 }
