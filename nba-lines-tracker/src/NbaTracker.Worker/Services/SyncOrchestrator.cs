@@ -316,7 +316,7 @@ public class SyncOrchestrator
             _fileLogger.LogSyncComplete(
                 date,
                 syncRun.Status.ToString(),
-                syncRun.GamesProcessed,
+                syncRun.GamesProcessed ?? 0,
                 errors.Count,
                 syncRun.ErrorDetails);
         }
