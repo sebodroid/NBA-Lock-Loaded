@@ -5,6 +5,7 @@ import { formatDistanceToNow } from 'date-fns'
 import { Button } from '@/components/ui/button'
 import { TeamGrid } from '@/components/grid/TeamGrid'
 import { PanelStrip } from '@/components/panels/PanelStrip'
+import { MatchupsSection } from '@/components/matchups/MatchupsSection'
 import { useAppStore } from '@/store/useAppStore'
 import { useTeams } from '@/api/teams'
 import { logout } from '@/api/auth'
@@ -72,6 +73,7 @@ export function MainPage() {
 
       {/* Main content */}
       <main className="max-w-screen-xl mx-auto px-4 py-6">
+        <MatchupsSection />
         <TeamGrid />
         <PanelStrip />
       </main>

@@ -53,7 +53,7 @@ export function GameLog({ games, teamAbbr }: GameLogProps) {
               return (
                 <tr key={g.gameId} className="border-b border-border/50 hover:bg-muted/30">
                   <td className="py-1.5 pr-3 tabular-nums text-muted-foreground">
-                    {format(new Date(g.gameDate), 'M/d')}
+                    {format(new Date(g.gameDate + 'T00:00:00'), 'M/d')}
                   </td>
                   <td className="py-1.5 pr-3 font-medium">
                     {g.isHomeGame ? '' : '@'}{opponent}
