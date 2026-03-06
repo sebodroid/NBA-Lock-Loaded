@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import {
   useReactTable,
   getCoreRowModel,
@@ -47,29 +47,20 @@ export function TeamGrid() {
     DEFAULT_VISIBILITY
   )
   const [conferenceFilter, setConferenceFilter] = useState<string | null>(null)
-  const [divisionFilter, setDivisionFilter] = useState<string | null>(null)
 
-  // Pre-filter data before passing to TanStack Table.
-  // Conference and division filters are applied here, not via TanStack column filters,
-  // because using both pre-filter and TanStack filter simultaneously would cause issues.
   const filteredTeams = useMemo<TeamStatsResponse[]>(() => {
     return teams.filter(t => {
       if (conferenceFilter && t.conference !== conferenceFilter) return false
-      if (divisionFilter && t.division !== divisionFilter) return false
       return true
     })
-  }, [teams, conferenceFilter, divisionFilter])
+  }, [teams, conferenceFilter])
 
   const table = useReactTable({
     data: filteredTeams,
     columns: teamColumns,
     state: { sorting, columnVisibility },
     onSortingChange: setSorting,
-    onColumnVisibilityChange: (updater) => {
-      setColumnVisibility(
-        typeof updater === 'function' ? updater(columnVisibility) : updater
-      )
-    },
+    onColumnVisibilityChange: setColumnVisibility,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
   })
@@ -88,8 +79,6 @@ export function TeamGrid() {
         table={table}
         conferenceFilter={conferenceFilter}
         setConferenceFilter={setConferenceFilter}
-        divisionFilter={divisionFilter}
-        setDivisionFilter={setDivisionFilter}
       />
       <div className="rounded-md border">
         <Table>

@@ -48,6 +48,12 @@ function H2HRow({ game, homeTeamId }: { game: H2HGameEntry; homeTeamId: number }
         {format(new Date(game.gameDate + 'T00:00:00'), 'M/d')}
       </td>
       <td className="py-1 pr-2 tabular-nums text-[11px]">{scoreText}</td>
+      <td className="py-1 pr-2 tabular-nums text-muted-foreground text-[11px]">
+        {game.spreadLine !== null ? game.spreadLine : '–'}
+      </td>
+      <td className="py-1 pr-2 tabular-nums text-muted-foreground text-[11px]">
+        {game.totalLine !== null ? game.totalLine : '–'}
+      </td>
       <td className="py-1 pr-2">
         {atsResult ? (
           <Badge variant="outline" className={`text-[10px] px-1 py-0 ${atsBadgeClass(atsResult)}`}>
@@ -164,6 +170,8 @@ export function MatchupCard({ matchup }: MatchupCardProps) {
                 <tr className="text-muted-foreground">
                   <th className="text-left text-[10px] font-medium pb-1 pr-2">Date</th>
                   <th className="text-left text-[10px] font-medium pb-1 pr-2">Score</th>
+                  <th className="text-left text-[10px] font-medium pb-1 pr-2">Sprd</th>
+                  <th className="text-left text-[10px] font-medium pb-1 pr-2">Tot</th>
                   <th className="text-left text-[10px] font-medium pb-1 pr-2">ATS</th>
                   <th className="text-left text-[10px] font-medium pb-1">O/U</th>
                 </tr>

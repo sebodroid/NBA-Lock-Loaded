@@ -3,31 +3,27 @@ import type { TeamStatsResponse } from '@/types/api'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
-  DropdownMenuCheckboxItem,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { SlidersHorizontal, ChevronDown } from 'lucide-react'
+import { SlidersHorizontal, Check } from 'lucide-react'
+import { cn } from '@/lib/utils'
 
 const CONFERENCES = ['East', 'West'] as const
-const DIVISIONS = ['Atlantic', 'Central', 'Southeast', 'Northwest', 'Pacific', 'Southwest'] as const
 
 interface GridToolbarProps {
   table: Table<TeamStatsResponse>
   conferenceFilter: string | null
   setConferenceFilter: (v: string | null) => void
-  divisionFilter: string | null
-  setDivisionFilter: (v: string | null) => void
 }
 
 export function GridToolbar({
   table,
   conferenceFilter,
   setConferenceFilter,
-  divisionFilter,
-  setDivisionFilter,
 }: GridToolbarProps) {
   return (
     <div className="flex items-center gap-2 py-3">
@@ -46,40 +42,6 @@ export function GridToolbar({
         ))}
       </div>
 
-      {/* Division filter — dropdown select */}
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="outline" size="sm" className="h-8 text-xs">
-            {divisionFilter ?? 'Division'}
-            <ChevronDown className="ml-1 h-3.5 w-3.5" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start">
-          <DropdownMenuLabel>Filter by Division</DropdownMenuLabel>
-          <DropdownMenuSeparator />
-          {divisionFilter && (
-            <>
-              <DropdownMenuCheckboxItem
-                checked={false}
-                onCheckedChange={() => setDivisionFilter(null)}
-              >
-                Clear filter
-              </DropdownMenuCheckboxItem>
-              <DropdownMenuSeparator />
-            </>
-          )}
-          {DIVISIONS.map(div => (
-            <DropdownMenuCheckboxItem
-              key={div}
-              checked={divisionFilter === div}
-              onCheckedChange={() => setDivisionFilter(divisionFilter === div ? null : div)}
-            >
-              {div}
-            </DropdownMenuCheckboxItem>
-          ))}
-        </DropdownMenuContent>
-      </DropdownMenu>
-
       <div className="flex-1" />
 
       {/* Column visibility toggle */}
@@ -97,18 +59,23 @@ export function GridToolbar({
             .getAllColumns()
             .filter(col => col.getCanHide())
             .map(col => (
-              <DropdownMenuCheckboxItem
+              <DropdownMenuItem
                 key={col.id}
-                checked={col.getIsVisible()}
-                onCheckedChange={value => col.toggleVisibility(!!value)}
                 className="capitalize"
+                onSelect={e => {
+                  e.preventDefault()
+                  col.toggleVisibility(!col.getIsVisible())
+                }}
               >
+                <Check
+                  className={cn('mr-2 h-4 w-4', col.getIsVisible() ? 'opacity-100' : 'opacity-0')}
+                />
                 {col.id === 'atsPct' ? 'ATS%'
                   : col.id === 'atsRecord' ? 'ATS Record'
                   : col.id === 'ouPct' ? 'O/U%'
                   : col.id === 'ouRecord' ? 'O/U Record'
                   : col.id}
-              </DropdownMenuCheckboxItem>
+              </DropdownMenuItem>
             ))}
         </DropdownMenuContent>
       </DropdownMenu>
