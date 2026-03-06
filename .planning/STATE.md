@@ -96,7 +96,7 @@ None yet.
 
 - Phase 2: Verify BallDontLie and The Odds API current rate limits and response schemas before building clients
 - Phase 2: Confirm whether The Odds API historical endpoint is available on free tier or requires $79/month Starter plan for 2024-25 season backfill
-- Phase 5: Deployment target not decided — evaluate Railway, Fly.io, and Azure App Service for .NET Worker Service support (persistent background process required, not serverless)
+- Phase 5: Deployment target decided — DigitalOcean Droplet ($12/month, 2GB RAM) for API + Worker containers; Cloudflare Pages (free) for React SPA static files; Aiven PostgreSQL already handles DB
 - Local dev: `dotnet ef database update` from Windows host cannot connect to Docker PostgreSQL via TCP (WSL2 NAT + SCRAM auth). Use SQL script + docker exec approach for future local migrations.
 - 02-Worker: MSB3277 warnings about EF Core version conflict (9.0.1 vs 9.0.13) in NbaTracker.Worker — pre-existing, build succeeds with 0 errors, safe to ignore until NuGet cache refreshes
 - 02-04: HardRock fallback bookmaker key 'hardrockbet' LOW confidence — validate against debug logs on first real run
