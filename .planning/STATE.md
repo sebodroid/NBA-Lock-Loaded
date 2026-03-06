@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-02-17)
 ## Current Position
 
 Phase: 4 of 5 (React Frontend) — IN PROGRESS
-Plan: 03-complete (of 4 total)
-Status: Plan 04-03 complete — multi-panel comparison system: PanelStrip, TeamPanel, PanelStats, GameLog components ready for MainPage integration.
-Last activity: 2026-02-20 — Completed Plan 04-03: Multi-panel comparison (PanelStrip + TeamPanel + PanelStats + GameLog with TanStack Query, Zustand, color-coded badges)
+Plan: 04-at-checkpoint (of 4 total)
+Status: Plan 04-04 Task 1 complete — MainPage wired with TeamGrid, PanelStrip, MatchupsSection, sticky header (last-synced, theme toggle, logout), nginx proxy. Awaiting human visual verification (Task 2 checkpoint).
+Last activity: 2026-03-06 — Executed Plan 04-04 Task 1: MainPage composition, App.tsx wiring, nginx /api/ proxy. Build passes 0 errors. Stopped at checkpoint:human-verify.
 
-Progress: [█████████░] 80%
+Progress: [█████████░] 88%
 
 ## Performance Metrics
 
@@ -85,6 +85,8 @@ Recent decisions affecting current work:
 - 04-03: teamAbbr prop kept in GameLog with void suppression — preserves public API for future score-column highlighting without TS error
 - 04-03: PanelStrip returns null (not empty div) when openPanels is empty — no layout space consumed when no panels open
 - 04-03: id=panel-{teamId} on TeamPanel Card root enables Zustand openPanel scrollIntoView targeting
+- 04-04: Popover.Root used for column visibility instead of DropdownMenu — Popovers stay open on item click enabling multi-column toggling without dismissal
+- 04-04: lastSyncedAt read from teams[0].lastSyncedAt — all 30 team records share same sync timestamp, reading index 0 is safe and avoids additional API call
 
 ### Pending Todos
 
@@ -102,6 +104,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-20
-Stopped at: Completed 04-03-PLAN.md — multi-panel comparison: PanelStrip, TeamPanel, PanelStats, GameLog with TanStack Query and Zustand.
-Resume file: .planning/phases/04-react-frontend/04-04-PLAN.md (main page layout, wire all components together)
+Last session: 2026-03-06
+Stopped at: 04-04-PLAN.md Task 2 (checkpoint:human-verify) — Task 1 complete, awaiting visual verification of all Phase 4 success criteria at http://localhost:5173.
+Resume signal: Type "approved" in next session after visual verification passes, or describe issues found.
