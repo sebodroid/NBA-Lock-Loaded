@@ -5,6 +5,7 @@ public enum SyncRunStatus { Running, Success, Partial, Failed }
 public class SyncRun
 {
     public int Id { get; set; }
+    public DateOnly? SyncDate { get; set; }              // The calendar date this run targeted
     public DateTime StartedAt { get; set; }
     public DateTime? CompletedAt { get; set; }
     public SyncRunStatus Status { get; set; }

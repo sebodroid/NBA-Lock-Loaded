@@ -34,6 +34,13 @@ public class Worker : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        if (_options.SyncDate.HasValue)
+        {
+            _logger.LogInformation("Single-date mode: syncing {Date}", _options.SyncDate.Value);
+            await RunSyncForDateAsync(_options.SyncDate.Value, stoppingToken);
+            return;
+        }
+
         if (_options.IsBackfill)
         {
             await RunBackfillAsync(stoppingToken);
@@ -57,6 +64,9 @@ public class Worker : BackgroundService
             await Task.Delay(delay, ct);
             if (ct.IsCancellationRequested) break;
 
+            // Cron fires at 5 AM ET — run today's sync (startup already handles the idempotency
+            // check, so if for any reason it was already done, we run it again intentionally here
+            // to pick up final scores that weren't available at startup)
             await RunSyncForDateAsync(DateOnly.FromDateTime(DateTime.UtcNow), ct);
         }
     }
@@ -66,27 +76,44 @@ public class Worker : BackgroundService
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<NbaTrackerDbContext>();
 
-        var lastSync = await db.SyncRuns
-            .Where(r => r.Status == SyncRunStatus.Success || r.Status == SyncRunStatus.Partial)
-            .OrderByDescending(r => r.CompletedAt)
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+
+        // Find the most recent date we have a completed sync for
+        var lastSyncedDate = await db.SyncRuns
+            .Where(r => r.SyncDate != null
+                     && (r.Status == SyncRunStatus.Success || r.Status == SyncRunStatus.Partial))
+            .OrderByDescending(r => r.SyncDate)
+            .Select(r => r.SyncDate)
             .FirstOrDefaultAsync(ct);
 
-        if (lastSync?.CompletedAt is null)
+        if (lastSyncedDate is null)
         {
-            _logger.LogInformation("No previous sync found — skipping gap detection");
-            return;
+            _logger.LogInformation("No previous sync found — skipping gap backfill");
+        }
+        else
+        {
+            // Fill any calendar gaps between last synced date and today (exclusive)
+            for (var d = lastSyncedDate.Value.AddDays(1); d < today; d = d.AddDays(1))
+            {
+                _logger.LogInformation("Gap detected: syncing {Date}", d);
+                await RunSyncForDateAsync(d, ct);
+                if (ct.IsCancellationRequested) return;
+            }
         }
 
-        // Note: gap detection may re-run a date that already has a PARTIAL sync_run.
-        // This is intentional — the upsert logic is idempotent, so duplicate runs for the same date are safe.
+        // Always sync today on startup unless a successful run already exists for today
+        var todayDone = await db.SyncRuns
+            .AnyAsync(r => r.SyncDate == today
+                        && (r.Status == SyncRunStatus.Success || r.Status == SyncRunStatus.Partial), ct);
 
-        var expectedNextSync = lastSync.CompletedAt.Value.Date.AddDays(1);
-        var today = DateTime.UtcNow.Date;
-
-        for (var d = DateOnly.FromDateTime(expectedNextSync); d < DateOnly.FromDateTime(today); d = d.AddDays(1))
+        if (!todayDone)
         {
-            _logger.LogInformation("Gap detected: backfilling {Date}", d);
-            await RunSyncForDateAsync(d, ct);
+            _logger.LogInformation("Today ({Date}) not yet synced — running on startup", today);
+            await RunSyncForDateAsync(today, ct);
+        }
+        else
+        {
+            _logger.LogInformation("Today ({Date}) already synced — skipping startup sync", today);
         }
     }
 

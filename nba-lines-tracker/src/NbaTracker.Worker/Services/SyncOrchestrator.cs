@@ -41,6 +41,7 @@ public class SyncOrchestrator
 
         var syncRun = new SyncRun
         {
+            SyncDate = date,
             StartedAt = DateTime.UtcNow,
             Status = SyncRunStatus.Running
         };
@@ -316,7 +317,7 @@ public class SyncOrchestrator
             _fileLogger.LogSyncComplete(
                 date,
                 syncRun.Status.ToString(),
-                syncRun.GamesProcessed,
+                syncRun.GamesProcessed ?? 0,
                 errors.Count,
                 syncRun.ErrorDetails);
         }

@@ -12,3 +12,6 @@ frontend/dist/
 # OS
 .DS_Store
 Thumbs.db
+
+# Postgres data directory (bind mount — never commit)
+pgdata/

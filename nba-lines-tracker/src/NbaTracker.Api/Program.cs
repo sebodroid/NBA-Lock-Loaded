@@ -113,4 +113,7 @@ AdminEndpoints.Map(api.MapGroup("/admin").RequireAuthorization("AdminOnly"));
 // Team endpoints — any authenticated user (not admin-restricted)
 TeamEndpoints.Map(api.MapGroup("/teams").RequireAuthorization());
 
+// Game endpoints — any authenticated user
+GameEndpoints.Map(api.MapGroup("/games").RequireAuthorization());
+
 app.Run();

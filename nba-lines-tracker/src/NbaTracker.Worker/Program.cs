@@ -10,7 +10,14 @@ var builder = Host.CreateApplicationBuilder(args);
 // Parse backfill flag: --backfill arg or BACKFILL=true env var
 bool isBackfill = args.Contains("--backfill") ||
     builder.Configuration["BACKFILL"]?.Equals("true", StringComparison.OrdinalIgnoreCase) == true;
-builder.Services.AddSingleton(new SyncOptions { IsBackfill = isBackfill });
+
+// Parse single-date override: SYNC_DATE=yyyy-MM-dd env var
+DateOnly? syncDate = null;
+var syncDateStr = builder.Configuration["SYNC_DATE"];
+if (!string.IsNullOrEmpty(syncDateStr) && DateOnly.TryParse(syncDateStr, out var parsedSyncDate))
+    syncDate = parsedSyncDate;
+
+builder.Services.AddSingleton(new SyncOptions { IsBackfill = isBackfill, SyncDate = syncDate });
 
 // SyncFileLogger is singleton — writes per-date and failed-days log files
 builder.Services.AddSingleton<SyncFileLogger>();
