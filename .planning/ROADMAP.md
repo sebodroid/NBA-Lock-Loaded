@@ -79,28 +79,30 @@ Plans:
   3. Clicking a team opens a detail panel showing full stats and game-by-game log; clicking another team opens a second panel beside the first without closing it
   4. ATS% cells show green color-coding above the threshold and red below; the page displays a "Last synced: X ago" timestamp
   5. User can show or hide grid columns and the selection persists across page refreshes
-**Plans**: TBD
+**Plans**: 4 plans
 
 Plans:
-- [ ] 04-01: App shell, routing, auth context, and login page
-- [ ] 04-02: Team grid (TanStack Table) with sort, filter, column visibility, and color coding
-- [ ] 04-03: Multi-panel comparison system (Zustand store, panel components, game log)
-- [ ] 04-04: Home/away splits, last 10 games stats, and data freshness indicator
+- [ ] 04-01-PLAN.md — App shell, routing, auth context, and login page
+- [ ] 04-02-PLAN.md — Team grid (TanStack Table) with sort, filter, column visibility, and color coding
+- [ ] 04-03-PLAN.md — Multi-panel comparison system (Zustand store, panel components, game log)
+- [ ] 04-04-PLAN.md — Home/away splits, last 10 games stats, and data freshness indicator
 
 ### Phase 5: Production Deploy
-**Goal**: The application runs reliably in production with proper secrets management, reverse proxy, and a chosen hosting target
+**Goal**: The application runs reliably in production with proper secrets management, Nginx API gateway, CI/CD pipeline to a DigitalOcean Droplet, and Cloudflare Pages hosting the SPA behind a Cloudflare Access email OTP gate
 **Depends on**: Phase 4
 **Requirements**: None (no unassigned v1 requirements; this phase delivers operational production readiness)
 **Success Criteria** (what must be TRUE):
-  1. `docker compose -f docker-compose.prod.yml up` starts the application against Aiven PostgreSQL with no local database container
-  2. All traffic enters through Nginx — `/api/*` is proxied to the API container, all other routes serve the React SPA
-  3. No secrets appear in committed files; all credentials are injected via environment variables at runtime
-  4. The application is accessible at a public URL and the daily sync runs successfully in the production environment
-**Plans**: TBD
+  1. `docker compose -f docker-compose.prod.yml up` starts API + Worker + Nginx against Aiven PostgreSQL with no local database container
+  2. Nginx proxies `/api/*` to the API container and returns 404 for all other routes; the React SPA is served by Cloudflare Pages
+  3. No secrets appear in committed files; all credentials are injected via .env on the Droplet at runtime
+  4. Pushing to main triggers GitHub Actions to build images, push to GHCR, and SSH-deploy to the Droplet automatically
+  5. The application is accessible at a Cloudflare Pages URL gated by email OTP; the daily sync runs successfully in production
+**Plans**: 3 plans
 
 Plans:
-- [ ] 05-01: Production Docker Compose, Nginx reverse proxy config, and secrets management
-- [ ] 05-02: Deployment to chosen host (Railway, Fly.io, or Azure App Service) with production sync verification
+- [ ] 05-01-PLAN.md — Production Docker Compose (API + Worker + Nginx), Nginx API-gateway config, and .env.example update
+- [ ] 05-02-PLAN.md — GitHub Actions CI/CD workflow (build + push to GHCR + SSH deploy to Droplet)
+- [ ] 05-03-PLAN.md — Droplet setup, first deployment trigger, Cloudflare Pages + Access configuration, and production smoke test
 
 ## Progress
 
@@ -113,4 +115,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | 2. Ingestion Worker | 0/4 | Not started | - |
 | 3. REST API | 0/2 | Not started | - |
 | 4. React Frontend | 0/4 | Not started | - |
-| 5. Production Deploy | 0/2 | Not started | - |
+| 5. Production Deploy | 0/3 | Not started | - |
