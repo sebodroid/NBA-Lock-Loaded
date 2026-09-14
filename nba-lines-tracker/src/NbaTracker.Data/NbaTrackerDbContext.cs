@@ -15,6 +15,11 @@ public class NbaTrackerDbContext : DbContext
     public DbSet<User> Users => Set<User>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<SyncRun> SyncRuns => Set<SyncRun>();
+    public DbSet<Player> Players => Set<Player>();
+    public DbSet<PlayerGameStat> PlayerGameStats => Set<PlayerGameStat>();
+    public DbSet<GamePreview> GamePreviews => Set<GamePreview>();
+    public DbSet<PlayerPropLine> PlayerPropLines => Set<PlayerPropLine>();
+    public DbSet<Bet> Bets => Set<Bet>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -61,17 +66,114 @@ public class NbaTrackerDbContext : DbContext
         modelBuilder.Entity<Game>()
             .HasIndex(g => g.AwayTeamId);
         modelBuilder.Entity<Game>()
-            .HasIndex(g => g.NbaGameId)
+            .HasIndex(g => new { g.Sport, g.NbaGameId })
             .IsUnique();
         modelBuilder.Entity<Team>()
-            .HasIndex(t => t.NbaApiId)
-            .IsUnique();
-        modelBuilder.Entity<RefreshToken>()
+            .HasIndex(t => new { t.Sport, t.NbaApiId })
+            .IsUnique();        modelBuilder.Entity<RefreshToken>()
             .HasIndex(r => r.TokenHash)
             .IsUnique();
 
         modelBuilder.Entity<User>()
             .HasIndex(u => u.Email)
             .IsUnique();
+
+        // Player — optional FK to Team (last known team)
+        modelBuilder.Entity<Player>()
+            .HasOne(p => p.Team)
+            .WithMany()
+            .HasForeignKey(p => p.TeamId)
+            .OnDelete(DeleteBehavior.Restrict)
+            .IsRequired(false);
+
+        modelBuilder.Entity<Player>()
+            .HasIndex(p => new { p.Sport, p.ExternalId })
+            .IsUnique();
+
+        // PlayerGameStat — three required FKs (Player, Game, Team); Restrict avoids
+        // EF's multi-cascade-path error the same way Game's two Team FKs do above
+        modelBuilder.Entity<PlayerGameStat>()
+            .HasOne(s => s.Player)
+            .WithMany(p => p.GameStats)
+            .HasForeignKey(s => s.PlayerId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<PlayerGameStat>()
+            .HasOne(s => s.Game)
+            .WithMany()
+            .HasForeignKey(s => s.GameId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<PlayerGameStat>()
+            .HasOne(s => s.Team)
+            .WithMany()
+            .HasForeignKey(s => s.TeamId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<PlayerGameStat>()
+            .HasIndex(s => s.GameId);
+        modelBuilder.Entity<PlayerGameStat>()
+            .HasIndex(s => new { s.PlayerId, s.Category, s.StatName });
+
+        modelBuilder.Entity<GamePreview>()
+            .HasOne(p => p.Game)
+            .WithMany()
+            .HasForeignKey(p => p.GameId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<GamePreview>()
+            .HasIndex(p => p.GameId)
+            .IsUnique();
+
+        // PlayerPropLine — two required FKs (Game, Player); Restrict for the same
+        // multi-cascade-path reason as everywhere else in this file
+        modelBuilder.Entity<PlayerPropLine>()
+            .HasOne(l => l.Game)
+            .WithMany()
+            .HasForeignKey(l => l.GameId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<PlayerPropLine>()
+            .HasOne(l => l.Player)
+            .WithMany()
+            .HasForeignKey(l => l.PlayerId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<PlayerPropLine>()
+            .HasIndex(l => new { l.GameId, l.PlayerId, l.MarketKey })
+            .IsUnique();
+
+        // Bet — store enums as strings for readability, same as GameResult/SyncRun above
+        modelBuilder.Entity<Bet>()
+            .Property(b => b.Kind)
+            .HasConversion<string>();
+        modelBuilder.Entity<Bet>()
+            .Property(b => b.Side)
+            .HasConversion<string>();
+
+        // Bet — required FK to Game, optional FKs to PlayerPropLine/Player (PlayerProp
+        // bets only); Restrict for the same multi-cascade-path reason as everywhere else
+        modelBuilder.Entity<Bet>()
+            .HasOne(b => b.Game)
+            .WithMany()
+            .HasForeignKey(b => b.GameId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<Bet>()
+            .HasOne(b => b.PlayerPropLine)
+            .WithMany()
+            .HasForeignKey(b => b.PlayerPropLineId)
+            .OnDelete(DeleteBehavior.Restrict)
+            .IsRequired(false);
+
+        modelBuilder.Entity<Bet>()
+            .HasOne(b => b.Player)
+            .WithMany()
+            .HasForeignKey(b => b.PlayerId)
+            .OnDelete(DeleteBehavior.Restrict)
+            .IsRequired(false);
+
+        modelBuilder.Entity<Bet>()
+            .HasIndex(b => new { b.Sport, b.PlacedAt });
     }
 }

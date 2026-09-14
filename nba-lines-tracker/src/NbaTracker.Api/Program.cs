@@ -1,4 +1,5 @@
 using System.Text;
+using DotNetEnv;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -6,6 +7,10 @@ using NbaTracker.Api.Endpoints;
 using NbaTracker.Api.Services;
 using NbaTracker.Data;
 using NbaTracker.Data.Entities;
+
+// Load .env if present (local dev outside Docker). In Docker, real env vars
+// already exist and take precedence — Load is a no-op when the file is absent.
+Env.TraversePath().Load();
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -17,6 +22,9 @@ builder.Services.AddDbContext<NbaTrackerDbContext>(options =>
 
 // TokenService — scoped to match DbContext lifetime
 builder.Services.AddScoped<TokenService>();
+
+// AiPreviewService — scoped to match DbContext lifetime
+builder.Services.AddScoped<AiPreviewService>();
 
 // JWT bearer authentication
 // ASP.NET Core maps env var JWT__Secret -> config key JWT:Secret via __ separator
@@ -110,10 +118,25 @@ AuthEndpoints.Map(api.MapGroup("/auth"));
 // Admin endpoints — AdminOnly policy gates the entire group
 AdminEndpoints.Map(api.MapGroup("/admin").RequireAuthorization("AdminOnly"));
 
-// Team endpoints — any authenticated user (not admin-restricted)
-TeamEndpoints.Map(api.MapGroup("/teams").RequireAuthorization());
+// Team endpoints — sport-scoped, any authenticated user (not admin-restricted)
+TeamEndpoints.Map(api.MapGroup("/{sport}/teams").RequireAuthorization());
 
-// Game endpoints — any authenticated user
-GameEndpoints.Map(api.MapGroup("/games").RequireAuthorization());
+// Game endpoints — sport-scoped, any authenticated user
+GameEndpoints.Map(api.MapGroup("/{sport}/games").RequireAuthorization());
+
+// Player leaderboard endpoints — sport-scoped, any authenticated user
+PlayerEndpoints.Map(api.MapGroup("/{sport}/leaderboards").RequireAuthorization());
+
+// Player card endpoint — sport-scoped, any authenticated user
+PlayerEndpoints.MapPlayerCard(api.MapGroup("/{sport}/players").RequireAuthorization());
+
+// Insight endpoints — sport-scoped, any authenticated user
+InsightEndpoints.Map(api.MapGroup("/{sport}/insights").RequireAuthorization());
+
+// Bet tracking endpoints — sport-scoped, any authenticated user
+BetEndpoints.Map(api.MapGroup("/{sport}/bets").RequireAuthorization());
+
+// Hot bets endpoints — sport-scoped, any authenticated user
+HotBetsEndpoints.Map(api.MapGroup("/{sport}/hot-bets").RequireAuthorization());
 
 app.Run();

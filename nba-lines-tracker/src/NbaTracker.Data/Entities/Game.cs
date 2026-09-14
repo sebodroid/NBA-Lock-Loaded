@@ -15,6 +15,7 @@ public class Game
     public bool? WentToOvertime { get; set; }            // required for O/U push detection
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
+    public string Sport { get; set; } = "NBA";  // "NBA" | "MLB" | "NFL" | "NHL"
 
     public Team HomeTeam { get; set; } = null!;
     public Team AwayTeam { get; set; } = null!;

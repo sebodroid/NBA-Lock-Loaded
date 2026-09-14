@@ -1,11 +1,9 @@
-import { Popover } from 'radix-ui'
 import { Table } from '@tanstack/react-table'
 import type { TeamStatsResponse } from '@/types/api'
 import { Button } from '@/components/ui/button'
+import { SimpleDropdown } from '@/components/ui/simple-dropdown'
 import { SlidersHorizontal, Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
-
-const CONFERENCES = ['East', 'West'] as const
 
 const COLUMN_LABELS: Record<string, string> = {
   atsPct: 'ATS%',
@@ -16,12 +14,14 @@ const COLUMN_LABELS: Record<string, string> = {
 
 interface GridToolbarProps {
   table: Table<TeamStatsResponse>
+  conferenceOptions: readonly string[]
   conferenceFilter: string | null
   setConferenceFilter: (v: string | null) => void
 }
 
 export function GridToolbar({
   table,
+  conferenceOptions,
   conferenceFilter,
   setConferenceFilter,
 }: GridToolbarProps) {
@@ -29,9 +29,10 @@ export function GridToolbar({
 
   return (
     <div className="flex items-center gap-2 py-3">
-      {/* Conference filter — toggle buttons */}
+      {/* Conference filter — toggle buttons; hidden entirely when the sport has no conference data */}
+      {conferenceOptions.length > 0 && (
       <div className="flex items-center gap-1">
-        {CONFERENCES.map(conf => (
+        {conferenceOptions.map(conf => (
           <Button
             key={conf}
             variant={conferenceFilter === conf ? 'default' : 'outline'}
@@ -43,23 +44,23 @@ export function GridToolbar({
           </Button>
         ))}
       </div>
+      )}
 
       <div className="flex-1" />
 
-      {/* Column visibility — Popover stays open while toggling */}
-      <Popover.Root>
-        <Popover.Trigger asChild>
+      {/* Column visibility */}
+      <SimpleDropdown
+        align="end"
+        panelClassName="w-40"
+        trigger={
           <Button variant="outline" size="sm" className="h-8 text-xs">
             <SlidersHorizontal className="mr-1.5 h-3.5 w-3.5" />
             Columns
           </Button>
-        </Popover.Trigger>
-        <Popover.Portal>
-          <Popover.Content
-            align="end"
-            sideOffset={4}
-            className="z-50 w-40 rounded-md border bg-popover p-1 shadow-md text-popover-foreground"
-          >
+        }
+      >
+        {() => (
+          <>
             <p className="px-2 py-1.5 text-xs font-medium text-muted-foreground">Toggle columns</p>
             <div className="-mx-1 my-1 h-px bg-border" />
             {hideable.map(col => (
@@ -75,9 +76,9 @@ export function GridToolbar({
                 {COLUMN_LABELS[col.id] ?? col.id}
               </button>
             ))}
-          </Popover.Content>
-        </Popover.Portal>
-      </Popover.Root>
+          </>
+        )}
+      </SimpleDropdown>
     </div>
   )
 }

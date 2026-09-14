@@ -17,7 +17,8 @@ public class OddsApiMarket
 
 public class OddsApiOutcome
 {
-    [JsonPropertyName("name")] public string Name { get; set; } = null!;     // team name or "Over"/"Under"
+    [JsonPropertyName("name")] public string Name { get; set; } = null!;     // team name, "Over"/"Under"
     [JsonPropertyName("price")] public decimal Price { get; set; }           // American odds: -110 (API returns as float)
-    [JsonPropertyName("point")] public decimal? Point { get; set; }          // spread: -7.5 fav; total: 220.5
+    [JsonPropertyName("point")] public decimal? Point { get; set; }          // spread: -7.5 fav; total: 220.5; prop line
+    [JsonPropertyName("description")] public string? Description { get; set; }  // player prop markets only: player name
 }

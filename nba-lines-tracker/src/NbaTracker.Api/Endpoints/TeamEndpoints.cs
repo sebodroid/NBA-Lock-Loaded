@@ -14,23 +14,35 @@ public static class TeamEndpoints
         group.MapGet("/{id:int}/games", GetTeamGamesAsync);
     }
 
-    // GET /api/teams — all 30 teams with aggregate ATS/OU stats
+    // GET /api/{sport}/teams — all teams for a sport with aggregate ATS/OU stats.
+    // Optional ?season=2025 shows a specific completed season instead of the live one.
     private static async Task<IResult> GetAllTeamsAsync(
+        string sport,
         NbaTrackerDbContext db,
-        CancellationToken ct)
+        CancellationToken ct,
+        string? season = null)
     {
-        var teams = await db.Teams.ToListAsync(ct);
+        if (!SportRoute.TryNormalize(sport, out sport))
+            return Results.NotFound(new { error = $"Unknown sport: {sport}" });
 
-        // Load all FINAL games with results in ONE query (~2,460 rows max — acceptable in memory)
+        var teams = await db.Teams.Where(t => t.Sport == sport).ToListAsync(ct);
+
+        // Once the season starts, preseason games drop out of stats automatically —
+        // unless a specific past season was requested, which always gets its full window
+        var (resolvedSeason, statsStart) = SeasonHelper.ResolveSeasonWindow(
+            sport, season, DateOnly.FromDateTime(DateTime.UtcNow));
+
+        // Load all FINAL games with results in ONE query, scoped to this sport
         // AtsResult/OuResult enum comparisons happen in C# below, not in this EF query
         var finalGames = await db.Games
-            .Where(g => g.Status == "FINAL")
+            .Where(g => g.Sport == sport && g.Season == resolvedSeason
+                     && g.Status == "FINAL" && g.GameDate >= statsStart)
             .Include(g => g.GameResult)
             .ToListAsync(ct);
 
-        // Fetch the most recent completed SyncRun timestamp (once, shared across all teams)
+        // Fetch the most recent completed SyncRun timestamp for this sport
         var lastSync = await db.SyncRuns
-            .Where(r => r.CompletedAt != null)
+            .Where(r => r.Sport == sport && r.CompletedAt != null)
             .OrderByDescending(r => r.CompletedAt)
             .Select(r => r.CompletedAt)
             .FirstOrDefaultAsync(ct);
@@ -101,23 +113,33 @@ public static class TeamEndpoints
         return Results.Ok(stats);
     }
 
-    // GET /api/teams/{id}/stats — home/away splits for a single team
+    // GET /api/{sport}/teams/{id}/stats — home/away splits for a single team
     private static async Task<IResult> GetTeamStatsAsync(
+        string sport,
         int id,
         NbaTrackerDbContext db,
-        CancellationToken ct)
+        CancellationToken ct,
+        string? season = null)
     {
-        var team = await db.Teams.FindAsync([id], ct);
+        if (!SportRoute.TryNormalize(sport, out sport))
+            return Results.NotFound(new { error = $"Unknown sport: {sport}" });
+
+        var team = await db.Teams.FirstOrDefaultAsync(t => t.Id == id && t.Sport == sport, ct);
         if (team is null) return Results.NotFound();
 
-        // Two targeted queries (one for home games, one for away) — avoids loading all 2,460 rows
+        var (resolvedSeason, statsStart) = SeasonHelper.ResolveSeasonWindow(
+            sport, season, DateOnly.FromDateTime(DateTime.UtcNow));
+
+        // Two targeted queries (one for home games, one for away) — avoids loading all rows
         var homeGames = await db.Games
-            .Where(g => g.HomeTeamId == id && g.Status == "FINAL")
+            .Where(g => g.HomeTeamId == id && g.Sport == sport && g.Season == resolvedSeason
+                     && g.Status == "FINAL" && g.GameDate >= statsStart)
             .Include(g => g.GameResult)
             .ToListAsync(ct);
 
         var awayGames = await db.Games
-            .Where(g => g.AwayTeamId == id && g.Status == "FINAL")
+            .Where(g => g.AwayTeamId == id && g.Sport == sport && g.Season == resolvedSeason
+                     && g.Status == "FINAL" && g.GameDate >= statsStart)
             .Include(g => g.GameResult)
             .ToListAsync(ct);
 
@@ -132,19 +154,29 @@ public static class TeamEndpoints
         ));
     }
 
-    // GET /api/teams/{id}/games — game log for a single team
+    // GET /api/{sport}/teams/{id}/games — game log for a single team
     private static async Task<IResult> GetTeamGamesAsync(
+        string sport,
         int id,
         NbaTrackerDbContext db,
-        CancellationToken ct)
+        CancellationToken ct,
+        string? season = null)
     {
-        var exists = await db.Teams.AnyAsync(t => t.Id == id, ct);
+        if (!SportRoute.TryNormalize(sport, out sport))
+            return Results.NotFound(new { error = $"Unknown sport: {sport}" });
+
+        var exists = await db.Teams.AnyAsync(t => t.Id == id && t.Sport == sport, ct);
         if (!exists) return Results.NotFound();
+
+        var (resolvedSeason, statsStart) = SeasonHelper.ResolveSeasonWindow(
+            sport, season, DateOnly.FromDateTime(DateTime.UtcNow));
 
         // Load game details — Include navigation properties needed for the DTO projection
         // Do NOT project AtsResult/OuResult enums in the LINQ Select — materialize first, project in C#
         var games = await db.Games
-            .Where(g => (g.HomeTeamId == id || g.AwayTeamId == id) && g.Status == "FINAL")
+            .Where(g => (g.HomeTeamId == id || g.AwayTeamId == id)
+                     && g.Sport == sport && g.Season == resolvedSeason
+                     && g.Status == "FINAL" && g.GameDate >= statsStart)
             .Include(g => g.HomeTeam)
             .Include(g => g.AwayTeam)
             .Include(g => g.GameLine)

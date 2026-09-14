@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
-import { createBrowserRouter, RouterProvider, Navigate, Outlet } from 'react-router-dom'
+import { createBrowserRouter, RouterProvider, Navigate, Outlet, useParams } from 'react-router-dom'
 import { LoginPage } from '@/components/auth/LoginPage'
 import { MainPage } from '@/components/layout/MainPage'
 import { useAppStore } from '@/store/useAppStore'
 import { tryRestoreSession } from '@/api/auth'
+import { isSport } from '@/lib/sports'
 
 function ProtectedRoute() {
   const isAuthenticated = useAppStore(s => s.isAuthenticated)
@@ -15,10 +16,20 @@ function PublicRoute() {
   return isAuthenticated ? <Navigate to="/" replace /> : <Outlet />
 }
 
+// Guards against an unknown value in the :sport segment (e.g. /nhl) — falls
+// back to /nfl rather than rendering a page that queries a bogus API route.
+function SportRoute() {
+  const { sport } = useParams<{ sport: string }>()
+  return isSport(sport) ? <MainPage /> : <Navigate to="/nfl" replace />
+}
+
 const router = createBrowserRouter([
   {
     element: <ProtectedRoute />,
-    children: [{ path: '/', element: <MainPage /> }],
+    children: [
+      { path: '/', element: <Navigate to="/nfl" replace /> },
+      { path: '/:sport', element: <SportRoute /> },
+    ],
   },
   {
     element: <PublicRoute />,

@@ -4,7 +4,20 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>NBA Lines Tracker</title>
+    <title>BetTheHouse</title>
+    <!-- Apply the theme class before first paint — avoids a flash of the light palette
+         while the app boots and Zustand rehydrates from localStorage. -->
+    <script>
+      (function () {
+        try {
+          var stored = JSON.parse(localStorage.getItem('nba-app-store') || 'null')
+          var theme = stored && stored.state && stored.state.theme
+          if (theme !== 'light') document.documentElement.classList.add('dark')
+        } catch (e) {
+          document.documentElement.classList.add('dark')
+        }
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>

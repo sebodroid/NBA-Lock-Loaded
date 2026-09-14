@@ -1,8 +1,11 @@
 import { ColumnDef } from '@tanstack/react-table'
 import { ArrowUpDown } from 'lucide-react'
+import { useParams } from 'react-router-dom'
 import type { TeamStatsResponse } from '@/types/api'
 import { calcAtsPct, calcOuPct, formatStreak } from '@/types/api'
 import { AtsCell } from './AtsCell'
+import { TeamLogo } from '@/components/ui/team-logo'
+import type { Sport } from '@/lib/sports'
 
 function SortHeader({ label, column }: { label: string; column: { toggleSorting: () => void } }) {
   return (
@@ -16,13 +19,25 @@ function SortHeader({ label, column }: { label: string; column: { toggleSorting:
   )
 }
 
+// A cell renderer function is itself rendered as a component by react-table's
+// flexRender, so it can use hooks — that's how this reaches the current :sport.
+function TeamNameCell({ name, abbreviation }: { name: string; abbreviation: string }) {
+  const { sport } = useParams<{ sport: Sport }>()
+  return (
+    <span className="flex items-center gap-2 font-medium">
+      <TeamLogo sport={sport ?? 'nfl'} abbreviation={abbreviation} className="h-5 w-5" />
+      {name}
+    </span>
+  )
+}
+
 export const teamColumns: ColumnDef<TeamStatsResponse>[] = [
   {
     id: 'team',
     accessorKey: 'name',
     header: ({ column }) => <SortHeader label="Team" column={column} />,
     cell: ({ row }) => (
-      <span className="font-medium">{row.original.name}</span>
+      <TeamNameCell name={row.original.name} abbreviation={row.original.abbreviation} />
     ),
     enableHiding: false,   // team name always visible — no toggle
   },

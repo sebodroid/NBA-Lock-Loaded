@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using NbaTracker.Api.Models;
+using NbaTracker.Api.Services;
 using NbaTracker.Data;
 using NbaTracker.Data.Entities;
 
@@ -10,13 +11,80 @@ public static class GameEndpoints
     public static void Map(RouteGroupBuilder group)
     {
         group.MapGet("/today", GetTodayMatchupsAsync);
+        group.MapGet("/{id:int}/preview", GetPreviewAsync);
+        group.MapGet("/{id:int}/props", GetGamePropsAsync);
     }
 
-    // GET /api/games/today — today's games with season stats and H2H history for each matchup
-    private static async Task<IResult> GetTodayMatchupsAsync(
+    // GET /api/{sport}/games/{id}/props — every player prop line tied to this game,
+    // each with the same hit-rate/opponent-adjusted estimate the player card shows.
+    // The direct "what can I bet on for this game" view — doesn't require the player
+    // to already appear in a leaderboard (they won't yet, before their first game
+    // of a new season).
+    private static async Task<IResult> GetGamePropsAsync(
+        string sport,
+        int id,
         NbaTrackerDbContext db,
         CancellationToken ct)
     {
+        if (!SportRoute.TryNormalize(sport, out sport))
+            return Results.NotFound(new { error = $"Unknown sport: {sport}" });
+
+        var game = await db.Games.FirstOrDefaultAsync(g => g.Id == id && g.Sport == sport, ct);
+        if (game is null) return Results.NotFound();
+
+        var propLines = await db.PlayerPropLines
+            .Include(l => l.Player).ThenInclude(p => p.Team)
+            .Include(l => l.Game)
+            .Where(l => l.GameId == id)
+            .OrderBy(l => l.Player.Name)
+            .ToListAsync(ct);
+
+        var statsStart = SeasonHelper.StatsStartDate(sport, DateOnly.FromDateTime(DateTime.UtcNow));
+
+        var entries = new List<GamePropEntry>();
+        foreach (var line in propLines)
+        {
+            var estimate = await PlayerEndpoints.BuildPropEstimateAsync(line.Player, line, statsStart, db, ct);
+            entries.Add(new GamePropEntry(line.Player.Id, line.Player.Name, line.Player.Team?.Abbreviation, estimate));
+        }
+
+        return Results.Ok(entries);
+    }
+
+    // GET /api/{sport}/games/{id}/preview — Claude-generated preview, cached until stale
+    private static async Task<IResult> GetPreviewAsync(
+        string sport,
+        int id,
+        NbaTrackerDbContext db,
+        AiPreviewService previewService,
+        CancellationToken ct)
+    {
+        if (!SportRoute.TryNormalize(sport, out sport))
+            return Results.NotFound(new { error = $"Unknown sport: {sport}" });
+
+        var game = await db.Games.FirstOrDefaultAsync(g => g.Id == id && g.Sport == sport, ct);
+        if (game is null) return Results.NotFound();
+
+        try
+        {
+            var text = await previewService.GetOrGeneratePreviewAsync(game, ct);
+            return Results.Ok(new { text });
+        }
+        catch (Exception ex)
+        {
+            return Results.Problem($"Could not generate preview: {ex.Message}", statusCode: 502);
+        }
+    }
+
+    // GET /api/{sport}/games/today — today's games with season stats and H2H history for each matchup
+    private static async Task<IResult> GetTodayMatchupsAsync(
+        string sport,
+        NbaTrackerDbContext db,
+        CancellationToken ct)
+    {
+        if (!SportRoute.TryNormalize(sport, out sport))
+            return Results.NotFound(new { error = $"Unknown sport: {sport}" });
+
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
 
         // Today's games (all statuses except POSTPONED)
@@ -25,7 +93,7 @@ public static class GameEndpoints
             .Include(g => g.AwayTeam)
             .Include(g => g.GameLine)
             .Include(g => g.GameResult)
-            .Where(g => g.GameDate == today && g.Status != "POSTPONED")
+            .Where(g => g.Sport == sport && g.GameDate == today && g.Status != "POSTPONED")
             .ToListAsync(ct);
 
         if (todayGames.Count == 0)
@@ -38,15 +106,16 @@ public static class GameEndpoints
             .ToHashSet();
 
         // Load all FINAL games for these teams this season in one query
-        // Season is determined from today's date: month >= 10 → current year, else year - 1
-        int seasonYear = today.Month >= 10 ? today.Year : today.Year - 1;
-        string season = $"{seasonYear}-{(seasonYear + 1) % 100:D2}";
+        string season = SeasonHelper.CurrentSeason(sport, today);
+        var statsStart = SeasonHelper.StatsStartDate(sport, today);
 
         var seasonGames = await db.Games
             .Include(g => g.GameLine)
             .Include(g => g.GameResult)
-            .Where(g => g.Season == season
+            .Where(g => g.Sport == sport
+                     && g.Season == season
                      && g.Status == "FINAL"
+                     && g.GameDate >= statsStart
                      && (teamIds.Contains(g.HomeTeamId) || teamIds.Contains(g.AwayTeamId)))
             .ToListAsync(ct);
 
@@ -97,7 +166,11 @@ public static class GameEndpoints
                 game.AwayTeam.Abbreviation,
                 game.GameLine?.Spread,
                 game.GameLine?.FavoriteTeamId,
+                game.GameLine?.HomeSpreadOdds,
+                game.GameLine?.AwaySpreadOdds,
                 game.GameLine?.Total,
+                game.GameLine?.OverOdds,
+                game.GameLine?.UnderOdds,
                 game.GameLine?.Bookmaker,
                 homeStats,
                 awayStats,

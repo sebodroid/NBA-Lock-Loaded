@@ -1,9 +1,14 @@
+using DotNetEnv;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Http.Resilience;
 using NbaTracker.Data;
 using NbaTracker.Worker;
 using NbaTracker.Worker.Services;
 using Polly;
+
+// Load .env if present (local dev outside Docker). In Docker, real env vars
+// already exist and take precedence — Load is a no-op when the file is absent.
+Env.TraversePath().Load();
 
 var builder = Host.CreateApplicationBuilder(args);
 
@@ -17,21 +22,38 @@ var syncDateStr = builder.Configuration["SYNC_DATE"];
 if (!string.IsNullOrEmpty(syncDateStr) && DateOnly.TryParse(syncDateStr, out var parsedSyncDate))
     syncDate = parsedSyncDate;
 
-builder.Services.AddSingleton(new SyncOptions { IsBackfill = isBackfill, SyncDate = syncDate });
+// One-time NFL historical-season backfill: NFL_HISTORICAL_SEASON=2025 env var
+int? nflHistoricalSeason = null;
+var nflHistoricalSeasonStr = builder.Configuration["NFL_HISTORICAL_SEASON"];
+if (!string.IsNullOrEmpty(nflHistoricalSeasonStr) && int.TryParse(nflHistoricalSeasonStr, out var parsedSeason))
+    nflHistoricalSeason = parsedSeason;
+
+builder.Services.AddSingleton(new SyncOptions
+{
+    IsBackfill = isBackfill,
+    SyncDate = syncDate,
+    NflHistoricalSeason = nflHistoricalSeason
+});
 
 // SyncFileLogger is singleton — writes per-date and failed-days log files
 builder.Services.AddSingleton<SyncFileLogger>();
 
-// Register SyncOrchestrator as Scoped (resolved per sync run scope in Worker)
+// NBA orchestrator
 builder.Services.AddScoped<SyncOrchestrator>();
 
-// Register DbContext to validate the project reference compiles and connects
+// MLB orchestrator
+builder.Services.AddScoped<MlbSyncOrchestrator>();
+
+// NFL orchestrator
+builder.Services.AddScoped<NflSyncOrchestrator>();
+
+// DbContext
 builder.Services.AddDbContext<NbaTrackerDbContext>(options =>
     options.UseNpgsql(
         builder.Configuration.GetConnectionString("Default"),
         x => x.MigrationsAssembly("NbaTracker.Data")));
 
-// BallDontLie typed HttpClient with 3-retry exponential backoff
+// BallDontLie — NBA schedule + scores
 builder.Services.AddHttpClient<BallDontLieClient>(client =>
 {
     client.BaseAddress = new Uri("https://api.balldontlie.io/nba/v1/");
@@ -49,7 +71,43 @@ builder.Services.AddHttpClient<BallDontLieClient>(client =>
     pipeline.AddTimeout(TimeSpan.FromSeconds(30));
 });
 
-// The Odds API client — NBA betting lines (spreads, totals) from FanDuel / HardRock
+// MLB Stats API — free, no key required
+builder.Services.AddHttpClient<MlbStatsClient>(client =>
+{
+    client.BaseAddress = new Uri("https://statsapi.mlb.com/");
+    client.DefaultRequestHeaders.Add("Accept", "application/json");
+})
+.AddResilienceHandler("MlbRetry", pipeline =>
+{
+    pipeline.AddRetry(new HttpRetryStrategyOptions
+    {
+        MaxRetryAttempts = 3,
+        BackoffType = DelayBackoffType.Exponential,
+        UseJitter = true,
+        Delay = TimeSpan.FromSeconds(2)
+    });
+    pipeline.AddTimeout(TimeSpan.FromSeconds(30));
+});
+
+// Highlightly — NFL schedule + scores
+builder.Services.AddHttpClient<NflStatsClient>(client =>
+{
+    client.BaseAddress = new Uri("https://american-football.highlightly.net/");
+    client.DefaultRequestHeaders.Add("x-rapidapi-key", builder.Configuration["Highlightly:ApiKey"]!);
+})
+.AddResilienceHandler("HighlightlyRetry", pipeline =>
+{
+    pipeline.AddRetry(new HttpRetryStrategyOptions
+    {
+        MaxRetryAttempts = 3,
+        BackoffType = DelayBackoffType.Exponential,
+        UseJitter = true,
+        Delay = TimeSpan.FromSeconds(2)
+    });
+    pipeline.AddTimeout(TimeSpan.FromSeconds(30));
+});
+
+// The Odds API — shared by NBA and MLB, sport key passed per call
 builder.Services.AddHttpClient<OddsApiClient>(client =>
 {
     client.BaseAddress = new Uri("https://api.the-odds-api.com/");
@@ -66,7 +124,10 @@ builder.Services.AddHttpClient<OddsApiClient>(client =>
     pipeline.AddTimeout(TimeSpan.FromSeconds(30));
 });
 
+// Hosted services — all workers run concurrently
 builder.Services.AddHostedService<Worker>();
+builder.Services.AddHostedService<MlbWorker>();
+builder.Services.AddHostedService<NflWorker>();
 
 var host = builder.Build();
 host.Run();

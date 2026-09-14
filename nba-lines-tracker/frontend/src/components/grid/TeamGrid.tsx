@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useParams } from 'react-router-dom'
 import {
   useReactTable,
   getCoreRowModel,
@@ -16,12 +17,16 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Button } from '@/components/ui/button'
+import { CollapsibleSection } from '@/components/ui/collapsible-section'
 import { useTeams } from '@/api/teams'
 import { useAppStore } from '@/store/useAppStore'
 import { useLocalStorage } from '@/hooks/useLocalStorage'
 import { teamColumns } from './columns'
 import { GridToolbar } from './GridToolbar'
 import type { TeamStatsResponse } from '@/types/api'
+import { CONFERENCE_OPTIONS, type Sport } from '@/lib/sports'
+import { getTeamBrand } from '@/lib/teamBranding'
 
 const DEFAULT_VISIBILITY: VisibilityState = {
   team: true,
@@ -37,8 +42,20 @@ const DEFAULT_VISIBILITY: VisibilityState = {
 
 const DEFAULT_SORT: SortingState = [{ id: 'atsPct', desc: true }]
 
+// Only NFL has a historical season backfilled right now — extend this when other
+// sports get one too.
+const HISTORICAL_SEASONS: Record<Sport, string[]> = {
+  nfl: ['2025'],
+  nba: [],
+  mlb: [],
+}
+
 export function TeamGrid() {
-  const { data: teams = [], isLoading, isError } = useTeams()
+  const { sport } = useParams<{ sport: Sport }>()
+  const conferenceOptions = sport ? CONFERENCE_OPTIONS[sport] : []
+  const historicalSeasons = sport ? HISTORICAL_SEASONS[sport] : []
+  const [season, setSeason] = useState<string | undefined>(undefined)   // undefined = live current season
+  const { data: teams = [], isLoading, isError } = useTeams(season)
   const openPanel = useAppStore(s => s.openPanel)
 
   const [sorting, setSorting] = useState<SortingState>(DEFAULT_SORT)
@@ -74,9 +91,34 @@ export function TeamGrid() {
   }
 
   return (
+    <CollapsibleSection title="Teams">
     <div className="space-y-1">
+      {historicalSeasons.length > 0 && (
+        <div className="flex items-center gap-1">
+          <Button
+            variant={season === undefined ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setSeason(undefined)}
+            className="h-7 px-2.5 text-xs"
+          >
+            Current
+          </Button>
+          {historicalSeasons.map(s => (
+            <Button
+              key={s}
+              variant={season === s ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setSeason(s)}
+              className="h-7 px-2.5 text-xs"
+            >
+              {s}
+            </Button>
+          ))}
+        </div>
+      )}
       <GridToolbar
         table={table}
+        conferenceOptions={conferenceOptions}
         conferenceFilter={conferenceFilter}
         setConferenceFilter={setConferenceFilter}
       />
@@ -113,24 +155,29 @@ export function TeamGrid() {
                 </TableCell>
               </TableRow>
             ) : (
-              table.getRowModel().rows.map(row => (
-                <TableRow
-                  key={row.id}
-                  onClick={() => openPanel(row.original.teamId)}
-                  className="cursor-pointer"
-                  data-state={row.getIsSelected() ? 'selected' : undefined}
-                >
-                  {row.getVisibleCells().map(cell => (
-                    <TableCell key={cell.id} className="py-2.5 text-sm">
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </TableCell>
-                  ))}
-                </TableRow>
-              ))
+              table.getRowModel().rows.map(row => {
+                const brand = getTeamBrand(sport ?? 'nfl', row.original.abbreviation)
+                return (
+                  <TableRow
+                    key={row.id}
+                    onClick={() => openPanel(row.original.teamId)}
+                    className="cursor-pointer border-l-4"
+                    style={{ borderLeftColor: brand?.primary ?? 'transparent' }}
+                    data-state={row.getIsSelected() ? 'selected' : undefined}
+                  >
+                    {row.getVisibleCells().map(cell => (
+                      <TableCell key={cell.id} className="py-2.5 text-sm">
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                )
+              })
             )}
           </TableBody>
         </Table>
       </div>
     </div>
+    </CollapsibleSection>
   )
 }

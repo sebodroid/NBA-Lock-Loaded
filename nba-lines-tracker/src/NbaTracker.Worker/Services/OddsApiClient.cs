@@ -27,32 +27,31 @@ public class OddsApiClient
     /// On the first call, logs all available bookmaker keys at Debug level so
     /// the HardRock key (OddsApi:FallbackBookmaker) can be validated.
     /// </summary>
-    public async Task<List<OddsApiEvent>> GetOddsAsync(CancellationToken ct)
+   public async Task<List<OddsApiEvent>> GetOddsAsync(CancellationToken ct, string sportKey = "basketball_nba")
+{
+    var path = $"v4/sports/{sportKey}/odds?regions=us&markets=spreads,totals,h2h" +
+               $"&bookmakers={_primaryBookmaker},{_fallbackBookmaker}" +
+               $"&oddsFormat=american" +
+               $"&apiKey={_apiKey}";
+
+    _logger.LogInformation("Fetching odds from The Odds API (sport: {Sport})", sportKey);
+
+    var events = await _http.GetFromJsonAsync<List<OddsApiEvent>>(path, ct)
+        ?? throw new InvalidOperationException("The Odds API returned null response for odds endpoint.");
+
+    if (!_bookmakersLogged)
     {
-        // Append bookmaker filter to limit response size (only the two we care about)
-        var path = $"v4/sports/basketball_nba/odds?regions=us&markets=spreads,totals" +
-                   $"&bookmakers={_primaryBookmaker},{_fallbackBookmaker}" +
-                   $"&apiKey={_apiKey}";
-
-        _logger.LogInformation("Fetching NBA odds from The Odds API (markets: spreads, totals)");
-
-        var events = await _http.GetFromJsonAsync<List<OddsApiEvent>>(path, ct)
-            ?? throw new InvalidOperationException("The Odds API returned null response for odds endpoint.");
-
-        // Log all bookmaker keys on first call so HardRock key can be validated
-        if (!_bookmakersLogged)
-        {
-            _bookmakersLogged = true;
-            var allKeys = events
-                .SelectMany(e => e.Bookmakers)
-                .Select(b => b.Key)
-                .Distinct()
-                .OrderBy(k => k);
-            _logger.LogDebug("Available bookmakers: {Keys}", string.Join(", ", allKeys));
-        }
-
-        return events;
+        _bookmakersLogged = true;
+        var allKeys = events
+            .SelectMany(e => e.Bookmakers)
+            .Select(b => b.Key)
+            .Distinct()
+            .OrderBy(k => k);
+        _logger.LogDebug("Available bookmakers: {Keys}", string.Join(", ", allKeys));
     }
+
+    return events;
+}
 
     /// <summary>
     /// Fetches historical pre-game spreads and totals for a past date.
@@ -60,25 +59,26 @@ public class OddsApiClient
     /// early enough to capture pre-game lines for all tip-offs.
     /// Requires a paid Odds API plan (Starter or above).
     /// </summary>
-    public async Task<List<OddsApiEvent>> GetHistoricalOddsAsync(DateOnly date, CancellationToken ct)
-    {
-        // Query snapshot at 17:00 UTC (noon ET) — pre-game for all tip-offs that day
-        var snapshotTime = new DateTime(date.Year, date.Month, date.Day, 17, 0, 0, DateTimeKind.Utc);
-        var iso = snapshotTime.ToString("yyyy-MM-ddTHH:mm:ssZ");
+   public async Task<List<OddsApiEvent>> GetHistoricalOddsAsync(DateOnly date, CancellationToken ct, string sportKey = "basketball_nba")
+{
+    var snapshotTime = new DateTime(date.Year, date.Month, date.Day, 17, 0, 0, DateTimeKind.Utc);
+    var iso = snapshotTime.ToString("yyyy-MM-ddTHH:mm:ssZ");
 
-        var path = $"v4/historical/sports/basketball_nba/odds?regions=us&markets=spreads,totals" +
-                   $"&bookmakers={_primaryBookmaker},{_fallbackBookmaker}" +
-                   $"&date={iso}" +
-                   $"&apiKey={_apiKey}";
+    var path = $"v4/historical/sports/{sportKey}/odds?regions=us&markets=spreads,totals,h2h" +
+               $"&bookmakers={_primaryBookmaker},{_fallbackBookmaker}" +
+               $"&oddsFormat=american" +
+               $"&date={iso}" +
+               $"&apiKey={_apiKey}";
 
-        _logger.LogInformation("Fetching historical NBA odds for {Date} (snapshot: {Snapshot})", date, iso);
+    _logger.LogInformation("Fetching historical odds for {Date} (sport: {Sport}, snapshot: {Snapshot})",
+        date, sportKey, iso);
 
-        var response = await _http.GetFromJsonAsync<OddsApiHistoricalResponse>(path, ct)
-            ?? throw new InvalidOperationException($"The Odds API returned null for historical odds on {date}.");
+    var response = await _http.GetFromJsonAsync<OddsApiHistoricalResponse>(path, ct)
+        ?? throw new InvalidOperationException($"The Odds API returned null for historical odds on {date}.");
 
-        _logger.LogInformation("Fetched {Count} historical events for {Date}", response.Data.Count, date);
-        return response.Data;
-    }
+    _logger.LogInformation("Fetched {Count} historical events for {Date}", response.Data.Count, date);
+    return response.Data;
+}
 
     /// <summary>
     /// Fetches completed game scores for recent games.
@@ -97,6 +97,35 @@ public class OddsApiClient
             ?? throw new InvalidOperationException("The Odds API returned null response for scores endpoint.");
     }
 
+    /// <summary>
+    /// Fetches player prop markets for a single event. Unlike spreads/totals, props are
+    /// not available on the bulk /odds endpoint — this is a separate, per-event call,
+    /// so it should only be made for games actually worth showing props for (today's
+    /// games), not the full rolling window.
+    /// </summary>
+    public async Task<OddsApiEvent?> GetEventPropsAsync(
+        string sportKey, string eventId, IEnumerable<string> markets, IEnumerable<string> bookmakers, CancellationToken ct)
+    {
+        var marketsParam = string.Join(",", markets);
+        var bookmakersParam = string.Join(",", bookmakers);
+        var path = $"v4/sports/{sportKey}/events/{eventId}/odds?regions=us&markets={marketsParam}" +
+                   $"&bookmakers={bookmakersParam}" +
+                   $"&oddsFormat=american" +
+                   $"&apiKey={_apiKey}";
+
+        _logger.LogDebug("Fetching player props for event {EventId} (sport: {Sport})", eventId, sportKey);
+
+        var response = await _http.GetAsync(path, ct);
+        if (!response.IsSuccessStatusCode)
+        {
+            _logger.LogDebug("No props available for event {EventId} ({StatusCode})",
+                eventId, response.StatusCode);
+            return null;
+        }
+
+        return await response.Content.ReadFromJsonAsync<OddsApiEvent>(cancellationToken: ct);
+    }
+
     // ---------------------------------------------------------------------------
     // Static helper methods — pure logic, no HTTP, no DI
     // ---------------------------------------------------------------------------
@@ -109,8 +138,22 @@ public class OddsApiClient
         List<OddsApiBookmaker> bookmakers,
         string primaryKey,
         string fallbackKey)
-        => bookmakers.FirstOrDefault(b => b.Key == primaryKey)
-           ?? bookmakers.FirstOrDefault(b => b.Key == fallbackKey);
+        => SelectCanonicalBookmaker(bookmakers, [primaryKey, fallbackKey]);
+
+    /// <summary>
+    /// Selects the first bookmaker present, in priority order — for cases like player
+    /// props where more than two candidate bookmakers are worth checking.
+    /// </summary>
+    public static OddsApiBookmaker? SelectCanonicalBookmaker(
+        List<OddsApiBookmaker> bookmakers, IEnumerable<string> priorityKeys)
+    {
+        foreach (var key in priorityKeys)
+        {
+            var match = bookmakers.FirstOrDefault(b => b.Key == key);
+            if (match is not null) return match;
+        }
+        return null;
+    }
 
     /// <summary>
     /// Extracts spread information from a spreads market.

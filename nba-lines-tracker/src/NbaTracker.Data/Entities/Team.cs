@@ -9,6 +9,7 @@ public class Team
     public string? Conference { get; set; }
     public string? Division { get; set; }
     public DateTime UpdatedAt { get; set; }
+    public string Sport { get; set; } = "NBA";
 
     public ICollection<Game> HomeGames { get; set; } = [];
     public ICollection<Game> AwayGames { get; set; } = [];

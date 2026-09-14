@@ -12,4 +12,6 @@ public class SyncRun
     public int? GamesProcessed { get; set; }
     public string? ErrorDetails { get; set; }            // JSON blob of error info
     public string? Notes { get; set; }
+    public string? Sport { get; set; } = "NBA";
+
 }
