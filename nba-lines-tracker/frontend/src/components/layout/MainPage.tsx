@@ -10,6 +10,7 @@ import { LeaderboardSection } from '@/components/leaderboard/LeaderboardSection'
 import { InsightsSection } from '@/components/insights/InsightsSection'
 import { PlayerCardModal } from '@/components/players/PlayerCardModal'
 import { GamePropsModal } from '@/components/matchups/GamePropsModal'
+import { TeamPropsModal } from '@/components/matchups/TeamPropsModal'
 import { PlaceBetModal } from '@/components/bets/PlaceBetModal'
 import { MyBetsPage } from '@/components/bets/MyBetsPage'
 import { HotBetsPage } from '@/components/bets/HotBetsPage'
@@ -157,6 +158,7 @@ export function MainPage() {
 
       <PlayerCardModal />
       <GamePropsModal />
+      <TeamPropsModal />
       <PlaceBetModal />
     </div>
   )

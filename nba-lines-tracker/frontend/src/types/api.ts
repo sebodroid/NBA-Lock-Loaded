@@ -160,6 +160,24 @@ export interface GamePropEntry {
   estimate: PropEstimate
 }
 
+// Team-level markets — college football has these instead of player props.
+export interface TeamPropOutcome {
+  side: 'Over' | 'Under' | 'Team'   // "Team" = a spread/moneyline outcome for one team
+  teamId: number | null             // null for a game-level total
+  teamAbbr: string | null
+  line: number | null               // signed for spreads; null for moneylines
+  price: number                     // American odds
+}
+
+export interface TeamPropMarket {
+  marketKey: string
+  label: string                     // e.g. "Team Total"
+  group: string                     // "Full Game" | "1st Half" | "1st Quarter"
+  bookmaker: string                 // Odds API key, e.g. "fanduel"
+  updatedAt: string                 // ISO 8601 UTC
+  outcomes: TeamPropOutcome[]
+}
+
 export interface BetResponse {
   id: number
   kind: 'PlayerProp' | 'Spread' | 'Total'

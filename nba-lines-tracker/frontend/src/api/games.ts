@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { useParams } from 'react-router-dom'
 import { apiClient } from './client'
-import type { TodayMatchupResponse, GamePreviewResponse, GamePropEntry } from '@/types/api'
+import type { TodayMatchupResponse, GamePreviewResponse, GamePropEntry, TeamPropMarket } from '@/types/api'
 
 export function useTodayMatchups() {
   const { sport = 'nba' } = useParams<{ sport: string }>()
@@ -20,6 +20,18 @@ export function useGameProps(gameId: number | null) {
     queryKey: ['games', 'props', sport, gameId],
     queryFn: () => apiClient.get<GamePropEntry[]>(`/api/${sport}/games/${gameId}/props`).then(r => r.data),
     enabled: gameId !== null && gameId > 0,
+    staleTime: 2 * 60 * 1000,
+  })
+}
+
+// Team-level markets for a game. Only college football syncs these, so callers pass
+// enabled=false elsewhere rather than firing a request per card that can only return [].
+export function useTeamProps(gameId: number | null, enabled = true) {
+  const { sport = 'nba' } = useParams<{ sport: string }>()
+  return useQuery({
+    queryKey: ['games', 'team-props', sport, gameId],
+    queryFn: () => apiClient.get<TeamPropMarket[]>(`/api/${sport}/games/${gameId}/team-props`).then(r => r.data),
+    enabled: enabled && gameId !== null && gameId > 0,
     staleTime: 2 * 60 * 1000,
   })
 }

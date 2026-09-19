@@ -13,6 +13,51 @@ public static class GameEndpoints
         group.MapGet("/today", GetTodayMatchupsAsync);
         group.MapGet("/{id:int}/preview", GetPreviewAsync);
         group.MapGet("/{id:int}/props", GetGamePropsAsync);
+        group.MapGet("/{id:int}/team-props", GetTeamPropsAsync);
+    }
+
+    // GET /api/{sport}/games/{id}/team-props — the team-level markets (team totals,
+    // first-half and first-quarter lines, ...) stored for this game. Empty for sports
+    // that don't sync them. College football has team props instead of player props.
+    private static async Task<IResult> GetTeamPropsAsync(
+        string sport,
+        int id,
+        NbaTrackerDbContext db,
+        CancellationToken ct)
+    {
+        if (!SportRoute.TryNormalize(sport, out sport))
+            return Results.NotFound(new { error = $"Unknown sport: {sport}" });
+
+        var game = await db.Games.FirstOrDefaultAsync(g => g.Id == id && g.Sport == sport, ct);
+        if (game is null) return Results.NotFound();
+
+        var lines = await db.TeamPropLines
+            .Include(l => l.Team)
+            .Where(l => l.GameId == id)
+            .ToListAsync(ct);
+
+        // Home team's outcomes first, then away, then game-level; Over before Under.
+        int TeamOrder(TeamPropLine l) =>
+            l.TeamId == game.HomeTeamId ? 0 : l.TeamId == game.AwayTeamId ? 1 : 2;
+        int SideOrder(string side) => side switch { "Over" => 0, "Under" => 1, _ => 2 };
+
+        var markets = TeamPropMarkets.Markets
+            .Select(meta => (Meta: meta, Rows: lines.Where(l => l.MarketKey == meta.Key).ToList()))
+            .Where(m => m.Rows.Count > 0)
+            .Select(m => new TeamPropMarketResponse(
+                m.Meta.Key,
+                m.Meta.Label,
+                m.Meta.Group,
+                m.Rows[0].Bookmaker,
+                m.Rows.Max(r => r.UpdatedAt).ToString("O"),
+                m.Rows
+                    .OrderBy(TeamOrder)
+                    .ThenBy(r => SideOrder(r.Side))
+                    .Select(r => new TeamPropOutcomeResponse(r.Side, r.TeamId, r.Team?.Abbreviation, r.Line, r.Price))
+                    .ToList()))
+            .ToList();
+
+        return Results.Ok(markets);
     }
 
     // GET /api/{sport}/games/{id}/props — every player prop line tied to this game,

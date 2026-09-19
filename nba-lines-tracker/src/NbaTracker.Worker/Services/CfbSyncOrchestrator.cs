@@ -32,6 +32,11 @@ public class CfbSyncOrchestrator
     // patchier set of books than the NFL, and asking for more costs no extra API credits.
     private static readonly string[] ExtraBookmakers = ["draftkings", "betmgm", "williamhill_us"];
 
+    // Team props cost real Odds API credits (one per market returned, per game), and the
+    // worker re-syncs today on every restart — so a game's props are not re-fetched
+    // within this window. Lines drift, but not enough hour-to-hour to be worth ~8 credits.
+    private static readonly TimeSpan TeamPropsFreshFor = TimeSpan.FromHours(3);
+
     private static readonly TimeZoneInfo EasternTime = GameMatchingService.GetEasternTimeZone();
 
     private readonly NbaTrackerDbContext _db;
@@ -133,6 +138,7 @@ public class CfbSyncOrchestrator
                 _logger.LogInformation("[CFB] Fetched {Count} Odds API events for {Date}", oddsEvents.Count, date);
 
                 var matchedEventIds = new HashSet<string>();
+                var propTargets = new List<(Game Game, string SportKey, bool Swapped)>();
                 int withLines = 0, withoutOdds = 0;
 
                 foreach (var match in matches)
@@ -193,6 +199,10 @@ public class CfbSyncOrchestrator
                         await _db.SaveChangesAsync(ct);
                         withLines++;
                         _logger.LogDebug("[CFB] Lines saved for game {GameId}", game.Id);
+
+                        // Team props only matter before kickoff, and only for today's slate.
+                        if (date == today && game.Status == "SCHEDULED")
+                            propTargets.Add((game, oddsEvent.SportKey, swapped));
                     }
                     catch (Exception ex) when (ex is not OperationCanceledException)
                     {
@@ -204,6 +214,19 @@ public class CfbSyncOrchestrator
                 _logger.LogInformation(
                     "[CFB] {Date}: {Matched} games with lines, {Skipped} matches skipped (no FBS/FCS odds)",
                     date, withLines, withoutOdds);
+
+                foreach (var (propGame, sportKey, swapped) in propTargets)
+                {
+                    try
+                    {
+                        await SyncTeamPropsAsync(propGame, sportKey, swapped, ct);
+                    }
+                    catch (Exception ex) when (ex is not OperationCanceledException)
+                    {
+                        _logger.LogWarning(ex, "[CFB] Failed to sync team props for game {GameId}", propGame.Id);
+                        errors.Add($"Team props for game {propGame.Id}: {ex.Message}");
+                    }
+                }
 
                 // A betting event with no Highlightly match usually means a name the
                 // matcher doesn't know yet — surface it so an alias can be added.
@@ -293,6 +316,50 @@ public class CfbSyncOrchestrator
             if (book is not null) return book;
         }
         return null;
+    }
+
+    /// <summary>
+    /// Fetches and stores a game's team props (a separate per-event Odds API call, like
+    /// the NFL's player props). Returns silently when nothing is posted — normal for FCS
+    /// and lower-profile games — and keeps whatever was stored before, so a book pulling
+    /// its props near kickoff doesn't blank a page that had them earlier.
+    /// </summary>
+    private async Task SyncTeamPropsAsync(Game game, string sportKey, bool swapped, CancellationToken ct)
+    {
+        if (game.OddsApiGameId is null) return;
+
+        var lastFetched = await _db.TeamPropLines
+            .Where(l => l.GameId == game.Id)
+            .Select(l => (DateTime?)l.UpdatedAt)
+            .MaxAsync(ct);
+        if (lastFetched is not null && DateTime.UtcNow - lastFetched < TeamPropsFreshFor)
+        {
+            _logger.LogDebug("[CFB] Team props for game {GameId} are fresh — skipping fetch", game.Id);
+            return;
+        }
+
+        var propsEvent = await _oddsClient.GetEventPropsAsync(
+            sportKey, game.OddsApiGameId, TeamPropMarkets.Keys, _bookmakerPriority, ct);
+        if (propsEvent is null)
+        {
+            _logger.LogInformation("[CFB] No team props response for game {GameId}", game.Id);
+            return;
+        }
+
+        var lines = CfbTeamProps.BuildLines(game, propsEvent, swapped, _bookmakerPriority);
+        if (lines.Count == 0)
+        {
+            _logger.LogInformation("[CFB] No team props posted for game {GameId}", game.Id);
+            return;
+        }
+
+        var existing = await _db.TeamPropLines.Where(l => l.GameId == game.Id).ToListAsync(ct);
+        _db.TeamPropLines.RemoveRange(existing);
+        _db.TeamPropLines.AddRange(lines);
+        await _db.SaveChangesAsync(ct);
+
+        _logger.LogInformation("[CFB] Team props for game {GameId}: {Markets} markets, {Outcomes} outcomes",
+            game.Id, lines.Select(l => l.MarketKey).Distinct().Count(), lines.Count);
     }
 
     private void UpsertLine(Game game, OddsApiEvent oddsEvent, bool swapped, OddsApiBookmaker bookmaker)

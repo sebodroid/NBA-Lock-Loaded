@@ -18,6 +18,9 @@ interface AppStore {
   gamePropsGame: { id: number; title: string } | null
   openGameProps: (game: { id: number; title: string }) => void
   closeGameProps: () => void
+  teamPropsGame: { id: number; title: string } | null
+  openTeamProps: (game: { id: number; title: string }) => void
+  closeTeamProps: () => void
   betDraft: BetDraft | null
   openBetDraft: (draft: BetDraft) => void
   closeBetDraft: () => void
@@ -65,6 +68,9 @@ export const useAppStore = create<AppStore>()(
       gamePropsGame: null,
       openGameProps: (game) => set({ gamePropsGame: game }),
       closeGameProps: () => set({ gamePropsGame: null }),
+      teamPropsGame: null,
+      openTeamProps: (game) => set({ teamPropsGame: game }),
+      closeTeamProps: () => set({ teamPropsGame: null }),
       betDraft: null,
       openBetDraft: (draft) => set({ betDraft: draft }),
       closeBetDraft: () => set({ betDraft: null }),

@@ -8,7 +8,7 @@ import { Separator } from '@/components/ui/separator'
 import { AtsCell } from '@/components/grid/AtsCell'
 import { TeamLogo } from '@/components/ui/team-logo'
 import { calcAtsPct, calcOuPct } from '@/types/api'
-import { useGamePreview, useGameProps } from '@/api/games'
+import { useGamePreview, useGameProps, useTeamProps } from '@/api/games'
 import { useAppStore } from '@/store/useAppStore'
 import { getTeamBrand } from '@/lib/teamBranding'
 import type { Sport } from '@/lib/sports'
@@ -92,7 +92,9 @@ export function MatchupCard({ matchup }: MatchupCardProps) {
   const { data: preview, isFetching: previewLoading, isError: previewError, refetch: fetchPreview } =
     useGamePreview(matchup.gameId)
   const { data: props = [] } = useGameProps(matchup.gameId)
+  const { data: teamProps = [] } = useTeamProps(matchup.gameId, sport === 'cfb')
   const openGameProps = useAppStore(s => s.openGameProps)
+  const openTeamProps = useAppStore(s => s.openTeamProps)
   const openBetDraft = useAppStore(s => s.openBetDraft)
 
   const homeBrand = getTeamBrand(sport ?? 'nfl', matchup.homeTeamAbbr)
@@ -297,6 +299,25 @@ export function MatchupCard({ matchup }: MatchupCardProps) {
             >
               <ListChecks className="h-3.5 w-3.5 mr-1.5" />
               Player Props ({props.length})
+            </Button>
+          </>
+        )}
+
+        {/* Team props — college football's counterpart to player props */}
+        {teamProps.length > 0 && (
+          <>
+            <Separator />
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 w-full text-xs"
+              onClick={() => openTeamProps({
+                id: matchup.gameId,
+                title: `${matchup.awayTeamAbbr} @ ${matchup.homeTeamAbbr}`,
+              })}
+            >
+              <ListChecks className="h-3.5 w-3.5 mr-1.5" />
+              Team Props ({teamProps.length})
             </Button>
           </>
         )}

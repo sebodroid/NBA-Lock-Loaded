@@ -19,6 +19,7 @@ public class NbaTrackerDbContext : DbContext
     public DbSet<PlayerGameStat> PlayerGameStats => Set<PlayerGameStat>();
     public DbSet<GamePreview> GamePreviews => Set<GamePreview>();
     public DbSet<PlayerPropLine> PlayerPropLines => Set<PlayerPropLine>();
+    public DbSet<TeamPropLine> TeamPropLines => Set<TeamPropLine>();
     public DbSet<Bet> Bets => Set<Bet>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -142,6 +143,26 @@ public class NbaTrackerDbContext : DbContext
         modelBuilder.Entity<PlayerPropLine>()
             .HasIndex(l => new { l.GameId, l.PlayerId, l.MarketKey })
             .IsUnique();
+
+        // TeamPropLine — required FK to Game, optional FK to Team (game-level totals have
+        // none); Restrict for the same multi-cascade-path reason as everywhere else. Rows
+        // for a game are replaced wholesale on each refresh, so no uniqueness constraint —
+        // just an index for the per-game lookup the API and the refresh both do.
+        modelBuilder.Entity<TeamPropLine>()
+            .HasOne(l => l.Game)
+            .WithMany()
+            .HasForeignKey(l => l.GameId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<TeamPropLine>()
+            .HasOne(l => l.Team)
+            .WithMany()
+            .HasForeignKey(l => l.TeamId)
+            .OnDelete(DeleteBehavior.Restrict)
+            .IsRequired(false);
+
+        modelBuilder.Entity<TeamPropLine>()
+            .HasIndex(l => new { l.GameId, l.MarketKey });
 
         // Bet — store enums as strings for readability, same as GameResult/SyncRun above
         modelBuilder.Entity<Bet>()

@@ -17,7 +17,7 @@ namespace NbaTracker.Data.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "9.0.19")
+                .HasAnnotation("ProductVersion", "9.0.20")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -504,6 +504,53 @@ namespace NbaTracker.Data.Migrations
                     b.ToTable("Teams");
                 });
 
+            modelBuilder.Entity("NbaTracker.Data.Entities.TeamPropLine", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Bookmaker")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("GameId")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal?>("Line")
+                        .HasColumnType("numeric");
+
+                    b.Property<DateTime>("LineTimestamp")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("MarketKey")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("Price")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Side")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int?>("TeamId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TeamId");
+
+                    b.HasIndex("GameId", "MarketKey");
+
+                    b.ToTable("TeamPropLines");
+                });
+
             modelBuilder.Entity("NbaTracker.Data.Entities.User", b =>
                 {
                     b.Property<int>("Id")
@@ -690,6 +737,24 @@ namespace NbaTracker.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("NbaTracker.Data.Entities.TeamPropLine", b =>
+                {
+                    b.HasOne("NbaTracker.Data.Entities.Game", "Game")
+                        .WithMany()
+                        .HasForeignKey("GameId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("NbaTracker.Data.Entities.Team", "Team")
+                        .WithMany()
+                        .HasForeignKey("TeamId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Game");
+
+                    b.Navigation("Team");
                 });
 
             modelBuilder.Entity("NbaTracker.Data.Entities.Game", b =>
