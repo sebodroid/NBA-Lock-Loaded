@@ -106,7 +106,8 @@ public static class TeamEndpoints
                 wins, losses,
                 atsCovers, atsLosses, atsPushes,
                 ouOvers, ouUnders, ouPushes,
-                streak, lastSyncedAt
+                streak, lastSyncedAt,
+                TeamLogoUrl.For(team.Sport, team.NbaApiId)
             );
         }).ToList();
 

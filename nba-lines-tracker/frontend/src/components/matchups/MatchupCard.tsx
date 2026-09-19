@@ -133,7 +133,7 @@ export function MatchupCard({ matchup }: MatchupCardProps) {
         {/* Teams header */}
         <div className="flex items-center justify-between">
           <div className="text-center flex-1">
-            <TeamLogo sport={sport ?? 'nfl'} abbreviation={matchup.homeTeamAbbr} className="h-10 w-10 mx-auto mb-1" />
+            <TeamLogo sport={sport ?? 'nfl'} abbreviation={matchup.homeTeamAbbr} src={matchup.homeTeamLogoUrl} className="h-10 w-10 mx-auto mb-1" />
             <p className="text-lg font-bold">{matchup.homeTeamAbbr}</p>
             <p className="text-xs text-muted-foreground truncate">{matchup.homeTeamName}</p>
           </div>
@@ -144,7 +144,7 @@ export function MatchupCard({ matchup }: MatchupCardProps) {
             </Badge>
           </div>
           <div className="text-center flex-1">
-            <TeamLogo sport={sport ?? 'nfl'} abbreviation={matchup.awayTeamAbbr} className="h-10 w-10 mx-auto mb-1" />
+            <TeamLogo sport={sport ?? 'nfl'} abbreviation={matchup.awayTeamAbbr} src={matchup.awayTeamLogoUrl} className="h-10 w-10 mx-auto mb-1" />
             <p className="text-lg font-bold">{matchup.awayTeamAbbr}</p>
             <p className="text-xs text-muted-foreground truncate">{matchup.awayTeamName}</p>
           </div>

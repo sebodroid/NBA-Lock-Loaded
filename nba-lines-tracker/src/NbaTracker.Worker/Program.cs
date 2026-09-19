@@ -28,11 +28,18 @@ var nflHistoricalSeasonStr = builder.Configuration["NFL_HISTORICAL_SEASON"];
 if (!string.IsNullOrEmpty(nflHistoricalSeasonStr) && int.TryParse(nflHistoricalSeasonStr, out var parsedSeason))
     nflHistoricalSeason = parsedSeason;
 
+// One-time CFB historical-season backfill: CFB_HISTORICAL_SEASON=2025 env var
+int? cfbHistoricalSeason = null;
+var cfbHistoricalSeasonStr = builder.Configuration["CFB_HISTORICAL_SEASON"];
+if (!string.IsNullOrEmpty(cfbHistoricalSeasonStr) && int.TryParse(cfbHistoricalSeasonStr, out var parsedCfbSeason))
+    cfbHistoricalSeason = parsedCfbSeason;
+
 builder.Services.AddSingleton(new SyncOptions
 {
     IsBackfill = isBackfill,
     SyncDate = syncDate,
-    NflHistoricalSeason = nflHistoricalSeason
+    NflHistoricalSeason = nflHistoricalSeason,
+    CfbHistoricalSeason = cfbHistoricalSeason
 });
 
 // SyncFileLogger is singleton — writes per-date and failed-days log files
@@ -46,6 +53,9 @@ builder.Services.AddScoped<MlbSyncOrchestrator>();
 
 // NFL orchestrator
 builder.Services.AddScoped<NflSyncOrchestrator>();
+
+// CFB orchestrator
+builder.Services.AddScoped<CfbSyncOrchestrator>();
 
 // DbContext
 builder.Services.AddDbContext<NbaTrackerDbContext>(options =>
@@ -89,7 +99,7 @@ builder.Services.AddHttpClient<MlbStatsClient>(client =>
     pipeline.AddTimeout(TimeSpan.FromSeconds(30));
 });
 
-// Highlightly — NFL schedule + scores
+// Highlightly — NFL and NCAA football schedule + scores (one client; league is a parameter)
 builder.Services.AddHttpClient<NflStatsClient>(client =>
 {
     client.BaseAddress = new Uri("https://american-football.highlightly.net/");
@@ -107,7 +117,7 @@ builder.Services.AddHttpClient<NflStatsClient>(client =>
     pipeline.AddTimeout(TimeSpan.FromSeconds(30));
 });
 
-// The Odds API — shared by NBA and MLB, sport key passed per call
+// The Odds API — shared by NBA, MLB, NFL and CFB, sport key passed per call
 builder.Services.AddHttpClient<OddsApiClient>(client =>
 {
     client.BaseAddress = new Uri("https://api.the-odds-api.com/");
@@ -128,6 +138,7 @@ builder.Services.AddHttpClient<OddsApiClient>(client =>
 builder.Services.AddHostedService<Worker>();
 builder.Services.AddHostedService<MlbWorker>();
 builder.Services.AddHostedService<NflWorker>();
+builder.Services.AddHostedService<CfbWorker>();
 
 var host = builder.Build();
 host.Run();

@@ -16,7 +16,8 @@ public record TeamStatsResponse(
     int OuUnders,
     int OuPushes,
     int Streak,
-    string? LastSyncedAt
+    string? LastSyncedAt,
+    string? LogoUrl = null
 );
 
 public record HomeAwaySplit(

@@ -3,7 +3,7 @@ namespace NbaTracker.Api;
 public static class SportRoute
 {
     private static readonly HashSet<string> Valid =
-        new(StringComparer.OrdinalIgnoreCase) { "NBA", "NFL", "MLB" };
+        new(StringComparer.OrdinalIgnoreCase) { "NBA", "NFL", "MLB", "CFB" };
 
     public static bool TryNormalize(string sport, out string normalized)
     {

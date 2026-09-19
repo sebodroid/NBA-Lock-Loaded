@@ -22,15 +22,24 @@ public class OddsApiClient
         _fallbackBookmaker = config["OddsApi:FallbackBookmaker"] ?? "hardrockbet";
     }
 
+    // Defaults to the configured primary/fallback pair. Callers with spottier bookmaker
+    // coverage (college football) pass a wider list — the Odds API bills by markets
+    // returned, not bookmakers requested, so a wider list costs nothing extra.
+    private string BookmakersParam(IEnumerable<string>? bookmakers)
+        => bookmakers is null
+            ? $"{_primaryBookmaker},{_fallbackBookmaker}"
+            : string.Join(",", bookmakers);
+
     /// <summary>
     /// Fetches pre-game spreads and totals for all NBA events in a single request.
     /// On the first call, logs all available bookmaker keys at Debug level so
     /// the HardRock key (OddsApi:FallbackBookmaker) can be validated.
     /// </summary>
-   public async Task<List<OddsApiEvent>> GetOddsAsync(CancellationToken ct, string sportKey = "basketball_nba")
+   public async Task<List<OddsApiEvent>> GetOddsAsync(
+       CancellationToken ct, string sportKey = "basketball_nba", IEnumerable<string>? bookmakers = null)
 {
     var path = $"v4/sports/{sportKey}/odds?regions=us&markets=spreads,totals,h2h" +
-               $"&bookmakers={_primaryBookmaker},{_fallbackBookmaker}" +
+               $"&bookmakers={BookmakersParam(bookmakers)}" +
                $"&oddsFormat=american" +
                $"&apiKey={_apiKey}";
 
@@ -59,13 +68,14 @@ public class OddsApiClient
     /// early enough to capture pre-game lines for all tip-offs.
     /// Requires a paid Odds API plan (Starter or above).
     /// </summary>
-   public async Task<List<OddsApiEvent>> GetHistoricalOddsAsync(DateOnly date, CancellationToken ct, string sportKey = "basketball_nba")
+   public async Task<List<OddsApiEvent>> GetHistoricalOddsAsync(
+       DateOnly date, CancellationToken ct, string sportKey = "basketball_nba", IEnumerable<string>? bookmakers = null)
 {
     var snapshotTime = new DateTime(date.Year, date.Month, date.Day, 17, 0, 0, DateTimeKind.Utc);
     var iso = snapshotTime.ToString("yyyy-MM-ddTHH:mm:ssZ");
 
     var path = $"v4/historical/sports/{sportKey}/odds?regions=us&markets=spreads,totals,h2h" +
-               $"&bookmakers={_primaryBookmaker},{_fallbackBookmaker}" +
+               $"&bookmakers={BookmakersParam(bookmakers)}" +
                $"&oddsFormat=american" +
                $"&date={iso}" +
                $"&apiKey={_apiKey}";

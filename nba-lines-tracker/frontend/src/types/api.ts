@@ -15,6 +15,7 @@ export interface TeamStatsResponse {
   ouPushes: number
   streak: number           // positive = W streak, negative = L streak, 0 = no games
   lastSyncedAt: string | null  // ISO 8601 UTC, from SyncRuns
+  logoUrl: string | null   // CFB only — other sports derive logos from the abbreviation
 }
 
 export interface HomeAwaySplit {
@@ -98,6 +99,8 @@ export interface TodayMatchupResponse {
   homeStats: TeamSeasonStats
   awayStats: TeamSeasonStats
   headToHead: H2HGameEntry[]
+  homeTeamLogoUrl: string | null   // CFB only
+  awayTeamLogoUrl: string | null
 }
 
 export interface LeaderboardEntryResponse {

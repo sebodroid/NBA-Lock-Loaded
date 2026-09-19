@@ -6,14 +6,16 @@ import { cn } from '@/lib/utils'
 interface TeamLogoProps {
   sport: Sport
   abbreviation: string | null | undefined
+  // A logo URL supplied by the API (CFB) — takes precedence over the abbreviation-based guess.
+  src?: string | null
   className?: string
 }
 
-// Renders nothing (not a broken-image icon) if there's no abbreviation to work with,
-// or if ESPN's CDN 404s on our best-effort URL guess.
-export function TeamLogo({ sport, abbreviation, className }: TeamLogoProps) {
+// Renders nothing (not a broken-image icon) if there's no logo to work with, or if the
+// image 404s on our best-effort URL guess.
+export function TeamLogo({ sport, abbreviation, src, className }: TeamLogoProps) {
   const [failed, setFailed] = useState(false)
-  const url = getTeamLogoUrl(sport, abbreviation)
+  const url = src ?? getTeamLogoUrl(sport, abbreviation)
   if (!url || failed) return null
 
   return (

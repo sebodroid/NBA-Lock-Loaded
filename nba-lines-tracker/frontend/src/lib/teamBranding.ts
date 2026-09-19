@@ -63,7 +63,9 @@ const ESPN_ABBR_OVERRIDES: Record<string, string> = {
 }
 
 export function getTeamLogoUrl(sport: Sport, abbreviation: string | null | undefined): string | null {
-  if (!abbreviation) return null
+  // College logos on ESPN's CDN are keyed by numeric ID, so an abbreviation guess is a
+  // guaranteed 404 — CFB logos come from the API (logoUrl) instead, see <TeamLogo src>.
+  if (!abbreviation || sport === 'cfb') return null
   const abbr = ESPN_ABBR_OVERRIDES[abbreviation.toUpperCase()] ?? abbreviation.toLowerCase()
   return `https://a.espncdn.com/i/teamlogos/${sport}/500/${abbr}.png`
 }

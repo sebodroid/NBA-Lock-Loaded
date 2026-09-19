@@ -21,11 +21,11 @@ function SortHeader({ label, column }: { label: string; column: { toggleSorting:
 
 // A cell renderer function is itself rendered as a component by react-table's
 // flexRender, so it can use hooks — that's how this reaches the current :sport.
-function TeamNameCell({ name, abbreviation }: { name: string; abbreviation: string }) {
+function TeamNameCell({ name, abbreviation, logoUrl }: { name: string; abbreviation: string; logoUrl?: string | null }) {
   const { sport } = useParams<{ sport: Sport }>()
   return (
     <span className="flex items-center gap-2 font-medium">
-      <TeamLogo sport={sport ?? 'nfl'} abbreviation={abbreviation} className="h-5 w-5" />
+      <TeamLogo sport={sport ?? 'nfl'} abbreviation={abbreviation} src={logoUrl} className="h-5 w-5" />
       {name}
     </span>
   )
@@ -37,7 +37,7 @@ export const teamColumns: ColumnDef<TeamStatsResponse>[] = [
     accessorKey: 'name',
     header: ({ column }) => <SortHeader label="Team" column={column} />,
     cell: ({ row }) => (
-      <TeamNameCell name={row.original.name} abbreviation={row.original.abbreviation} />
+      <TeamNameCell name={row.original.name} abbreviation={row.original.abbreviation} logoUrl={row.original.logoUrl} />
     ),
     enableHiding: false,   // team name always visible — no toggle
   },

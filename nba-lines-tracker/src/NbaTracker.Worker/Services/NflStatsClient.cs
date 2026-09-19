@@ -20,11 +20,14 @@ public class NflStatsClient
     }
 
     /// <summary>
-    /// Fetches NFL matches for a single date, following the data/pagination envelope
-    /// until totalCount is exhausted (paid tiers shouldn't hit this, but free-tier
-    /// responses can be paginated per the "plan" block in the docs).
+    /// Fetches matches for a single date, following the data/pagination envelope
+    /// until totalCount is exhausted (a busy college Saturday is ~150 matches, so
+    /// pagination is exercised for real, not just on free-tier plans). Highlightly's
+    /// American football API serves both NFL and NCAA from the same endpoints, so this
+    /// client is shared — pass league="NCAA" for college football.
     /// </summary>
-    public async Task<List<HighlightlyMatch>> GetGamesAsync(DateOnly date, CancellationToken ct)
+    public async Task<List<HighlightlyMatch>> GetGamesAsync(
+        DateOnly date, CancellationToken ct, string league = "NFL")
     {
         var dateStr = date.ToString("yyyy-MM-dd");
         var matches = new List<HighlightlyMatch>();
@@ -36,8 +39,8 @@ public class NflStatsClient
             // timezone=America/New_York — without it Highlightly buckets matches by UTC
             // calendar date, and NFL night games (8pm/10pm ET) fall after midnight UTC,
             // landing on the *next* UTC day and going missing from a "today" query.
-            var url = $"matches?date={dateStr}&league=NFL&timezone=America/New_York&limit={limit}&offset={offset}";
-            _logger.LogDebug("Fetching NFL matches for {Date} (offset {Offset})", dateStr, offset);
+            var url = $"matches?date={dateStr}&league={league}&timezone=America/New_York&limit={limit}&offset={offset}";
+            _logger.LogDebug("Fetching {League} matches for {Date} (offset {Offset})", league, dateStr, offset);
 
             var response = await _http.GetAsync(url, ct);
             response.EnsureSuccessStatusCode();
@@ -53,7 +56,7 @@ public class NflStatsClient
             if (offset >= total) break;
         }
 
-        _logger.LogInformation("Highlightly returned {Count} NFL matches for {Date}", matches.Count, dateStr);
+        _logger.LogInformation("Highlightly returned {Count} {League} matches for {Date}", matches.Count, league, dateStr);
         return matches;
     }
 

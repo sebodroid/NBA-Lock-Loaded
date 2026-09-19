@@ -8,7 +8,6 @@ Terminal 3 — Frontend (the web UI)
 cd frontend
 npm run dev
 
-
 Runnnig on MAC
 What you will need to redo on the Mac, since none of it lives in git:
 

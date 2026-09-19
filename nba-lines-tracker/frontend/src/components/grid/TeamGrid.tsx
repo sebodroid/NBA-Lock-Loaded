@@ -48,6 +48,7 @@ const HISTORICAL_SEASONS: Record<Sport, string[]> = {
   nfl: ['2025'],
   nba: [],
   mlb: [],
+  cfb: [],
 }
 
 export function TeamGrid() {

@@ -174,7 +174,9 @@ public static class GameEndpoints
                 game.GameLine?.Bookmaker,
                 homeStats,
                 awayStats,
-                h2hGames
+                h2hGames,
+                TeamLogoUrl.For(game.Sport, game.HomeTeam.NbaApiId),
+                TeamLogoUrl.For(game.Sport, game.AwayTeam.NbaApiId)
             );
         }).ToList();
 

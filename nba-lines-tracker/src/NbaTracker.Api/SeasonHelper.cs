@@ -5,13 +5,14 @@ namespace NbaTracker.Api;
 // Season string format differs by sport (matches what each sync orchestrator writes):
 // NBA spans two calendar years and is stored "2025-26"; NFL also spans two years
 // (regular season starts in fall, playoffs run into Feb) but is stored as the
-// starting year only ("2026"); MLB never crosses a year boundary.
+// starting year only ("2026"); CFB is the same shape (bowls and the championship run
+// into January); MLB never crosses a year boundary.
 public static class SeasonHelper
 {
     public static string CurrentSeason(string sport, DateOnly today) => sport switch
     {
         "NBA" => BuildNbaSeasonString(today.Month >= 10 ? today.Year : today.Year - 1),
-        "NFL" => (today.Month <= 2 ? today.Year - 1 : today.Year).ToString(),
+        "NFL" or "CFB" => (today.Month <= 2 ? today.Year - 1 : today.Year).ToString(),
         _     => today.Year.ToString()   // MLB
     };
 

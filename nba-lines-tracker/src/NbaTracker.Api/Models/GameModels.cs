@@ -44,5 +44,7 @@ public record TodayMatchupResponse(
     string? Bookmaker,
     TeamSeasonStats HomeStats,
     TeamSeasonStats AwayStats,
-    List<H2HGameEntry> HeadToHead
+    List<H2HGameEntry> HeadToHead,
+    string? HomeTeamLogoUrl = null,
+    string? AwayTeamLogoUrl = null
 );
