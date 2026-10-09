@@ -20,7 +20,8 @@ export function HotBetsPage() {
       <p className="text-sm text-muted-foreground mb-4">
         The week's player props with the strongest estimated hit rate — always the{' '}
         <span className="font-medium">Over</span>, since that's what the estimate measures.
-        Ranked highest-confidence first; only props with at least two games of history qualify.
+        Ranked highest-confidence first; only props with at least two games of history qualify,
+        and a good season number alone won't save a pick that's gone cold the last few games.
       </p>
 
       {isLoading && (
@@ -79,6 +80,12 @@ export function HotBetsPage() {
                     Hit in {e.hitCount} of {e.gamesWithData} games vs {e.opponentAbbreviation}
                     {e.estimatedHitRatePct !== null ? ' (opponent-adjusted)' : ''}
                   </p>
+
+                  {e.recentGamesWithData > 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      Last {e.recentGamesWithData}: {e.recentHitRatePct}% over
+                    </p>
+                  )}
 
                   <button
                     onClick={() => openBetDraft({

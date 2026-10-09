@@ -137,6 +137,8 @@ export interface PropEstimate {
   opponentAllowedAverage: number | null
   leagueAllowedAverage: number | null
   estimatedHitRatePct: number | null
+  recentGamesWithData: number       // last-5-games window, independent of statBasis
+  recentHitRatePct: number | null
 }
 
 // "Questionable" | "Doubtful" | "Out" | "Injured Reserve" — null means not on the report.

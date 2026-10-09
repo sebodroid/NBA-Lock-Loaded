@@ -15,6 +15,10 @@ public static class PlayerEndpoints
     // scanning every upcoming prop for the week's best bets.
     internal const int MinGamesForEstimate = 2;
 
+    // Size of the recency window used for the "recent form" signal alongside the
+    // season-long hit rate — see BuildPropEstimateAsync.
+    private const int RecentGamesWindow = 5;
+
     public static void Map(RouteGroupBuilder group)
     {
         group.MapGet("/{category}", GetLeaderboardAsync);
@@ -132,7 +136,7 @@ public static class PlayerEndpoints
             return new PropEstimate(
                 line.Id, line.MarketKey, label, category, line.Line, line.OverOdds, line.UnderOdds,
                 line.Bookmaker, line.UnderBookmaker, opponentTeam?.Abbreviation ?? "?", "current",
-                0, null, 0, null, null, null, null);
+                0, null, 0, null, null, null, null, 0, null);
         }
 
         var keyword = mapping.Keyword.ToLower();
@@ -173,10 +177,20 @@ public static class PlayerEndpoints
         }
 
         int gamesWithData = playerPerGame.Count;
-        decimal? seasonAverage = gamesWithData > 0 ? playerPerGame.Average() : null;
-        int hitCount = playerPerGame.Count(v => v > line.Line);
+        decimal? seasonAverage = gamesWithData > 0 ? playerPerGame.Average(x => x.Value) : null;
+        int hitCount = playerPerGame.Count(x => x.Value > line.Line);
         decimal? hitRatePct = gamesWithData > 0
             ? Math.Round(100m * hitCount / gamesWithData, 1)
+            : null;
+
+        // Recent form, independent of the season-long average — a player's last few games
+        // matter more than a full-season number that can't see a role change, a return from
+        // injury, or a defense's scheme adjustment. playerPerGame is already ordered newest
+        // first (see PerGameValuesAsync), so this is just the head of that same list.
+        var recentGames = playerPerGame.Take(RecentGamesWindow).ToList();
+        int recentGamesWithData = recentGames.Count;
+        decimal? recentHitRatePct = recentGamesWithData > 0
+            ? Math.Round(100m * recentGames.Count(x => x.Value > line.Line) / recentGamesWithData, 1)
             : null;
 
         // Without a resolved opponent there's no defensive context to compute — return the
@@ -186,7 +200,8 @@ public static class PlayerEndpoints
             return new PropEstimate(
                 line.Id, line.MarketKey, label, category, line.Line, line.OverOdds, line.UnderOdds,
                 line.Bookmaker, line.UnderBookmaker, "?", statBasis,
-                gamesWithData, seasonAverage, hitCount, hitRatePct, null, null, null);
+                gamesWithData, seasonAverage, hitCount, hitRatePct, null, null, null,
+                recentGamesWithData, recentHitRatePct);
         }
 
         // League-wide context for this market+season-basis — what every team allows,
@@ -220,7 +235,7 @@ public static class PlayerEndpoints
         {
             var opponentFactor = opponentAllowedAverage.Value / leagueAllowedAverage.Value;
             var adjustedLine = opponentFactor > 0 ? line.Line / opponentFactor : line.Line;
-            int adjustedHitCount = playerPerGame.Count(v => v > adjustedLine);
+            int adjustedHitCount = playerPerGame.Count(x => x.Value > adjustedLine);
             estimatedHitRatePct = Math.Round(100m * adjustedHitCount / gamesWithData, 1);
         }
 
@@ -228,7 +243,8 @@ public static class PlayerEndpoints
             line.Id, line.MarketKey, label, category, line.Line, line.OverOdds, line.UnderOdds,
             line.Bookmaker, line.UnderBookmaker, opponentTeam.Abbreviation, statBasis,
             gamesWithData, seasonAverage, hitCount, hitRatePct,
-            opponentAllowedAverage, leagueAllowedAverage, estimatedHitRatePct);
+            opponentAllowedAverage, leagueAllowedAverage, estimatedHitRatePct,
+            recentGamesWithData, recentHitRatePct);
     }
 
     // Runs the league-wide "what does every team allow in this stat" query once. Extracted
@@ -276,17 +292,20 @@ public static class PlayerEndpoints
     // Per-game values for a stat query: one number per game, taking the largest matching
     // entry when a game has several (see BuildPropEstimateAsync for why largest wins).
     // `exclude` drops sub-stat noise ("Yards Per Reception", "Longest Rush", …) that shares
-    // a keyword with the counting stat but would win the largest-value tie-break.
-    private static async Task<List<decimal>> PerGameValuesAsync(
+    // a keyword with the counting stat but would win the largest-value tie-break. Ordered
+    // newest-first so callers can take a recency window (e.g. "last 5 games") off the head
+    // of the list without a second query.
+    private static async Task<List<(DateOnly GameDate, decimal Value)>> PerGameValuesAsync(
         IQueryable<PlayerGameStat> query, string[] exclude, CancellationToken ct)
     {
         var rows = await query
-            .Select(s => new { s.GameId, s.StatName, s.Value })
+            .Select(s => new { s.GameId, s.Game.GameDate, s.StatName, s.Value })
             .ToListAsync(ct);
         return rows
             .Where(r => !exclude.Any(x => r.StatName.ToLower().Contains(x)))
             .GroupBy(r => r.GameId)
-            .Select(g => g.Max(r => r.Value!.Value))
+            .Select(g => (g.First().GameDate, g.Max(r => r.Value!.Value)))
+            .OrderByDescending(x => x.GameDate)
             .ToList();
     }
 

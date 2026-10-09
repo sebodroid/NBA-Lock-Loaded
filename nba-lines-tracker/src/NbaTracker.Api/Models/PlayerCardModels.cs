@@ -31,7 +31,13 @@ public record PropEstimate(
     // in this stat, relative to league average. Not a statistical probability — an
     // explainable heuristic: how often would he have cleared a bar shifted by the same
     // ratio his opponent's average allowed differs from the league average.
-    decimal? EstimatedHitRatePct
+    decimal? EstimatedHitRatePct,
+
+    // Recent-form window (last 5 games played, regardless of statBasis) — a season-long
+    // average can't see a role change, an injury return, or a defense's adjustment, so
+    // this is shown alongside it rather than replacing it.
+    int RecentGamesWithData,
+    decimal? RecentHitRatePct
 );
 
 public record PlayerCardResponse(

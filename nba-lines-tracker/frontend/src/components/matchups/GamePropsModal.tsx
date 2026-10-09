@@ -197,7 +197,10 @@ export function GamePropsModal() {
                                   </button>
                                 </div>
                               </td>
-                              <td className="py-1.5 text-right tabular-nums whitespace-nowrap">
+                              <td
+                                className="py-1.5 text-right tabular-nums whitespace-nowrap"
+                                title={e.recentGamesWithData > 0 ? `Last ${e.recentGamesWithData}: ${e.recentHitRatePct}% over` : undefined}
+                              >
                                 {pct !== null ? (
                                   <>
                                     {pct}%

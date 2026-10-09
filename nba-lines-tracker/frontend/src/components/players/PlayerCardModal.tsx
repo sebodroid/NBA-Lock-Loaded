@@ -67,6 +67,25 @@ function PropCard({ prop }: { prop: PropEstimate }) {
               </p>
             </div>
 
+            {prop.recentGamesWithData > 0 && (
+              <div>
+                <p className="text-xs text-muted-foreground">Last {prop.recentGamesWithData} games</p>
+                <p>
+                  Went over the line in{' '}
+                  <span className="font-medium">
+                    {Math.round((prop.recentHitRatePct ?? 0) / 100 * prop.recentGamesWithData)} of {prop.recentGamesWithData}
+                  </span>{' '}
+                  ({prop.recentHitRatePct}%)
+                  {prop.hitRatePct !== null && prop.recentHitRatePct !== null
+                    && Math.abs(prop.recentHitRatePct - prop.hitRatePct) >= 25 && (
+                    <span className={prop.recentHitRatePct > prop.hitRatePct ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}>
+                      {' '}— {prop.recentHitRatePct > prop.hitRatePct ? 'trending up' : 'trending down'} vs. season
+                    </span>
+                  )}
+                </p>
+              </div>
+            )}
+
             {hasOpponentContext ? (
               <div>
                 <p className="text-xs text-muted-foreground">Opponent context</p>

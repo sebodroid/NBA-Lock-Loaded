@@ -16,6 +16,14 @@ public static class HotBetsEndpoints
     // padded out with weaker bets to hit a round number.
     private const decimal MinHitRatePct = 65m;
 
+    // A good season/opponent-adjusted number doesn't mean much if the player has gone
+    // cold over their last few games — a role change, a nagging injury, or a defense
+    // adjustment a season-long average can't see. Require at least this many recent
+    // games before the recent-form check can veto a candidate at all (small samples are
+    // too noisy to act on), then veto anything clearly diverging from its season signal.
+    private const int MinRecentGamesForVeto = 3;
+    private const decimal RecentFormVetoPct = 40m;
+
     public static void Map(RouteGroupBuilder group)
     {
         group.MapGet("/", GetHotBetsAsync);
@@ -76,6 +84,11 @@ public static class HotBetsEndpoints
 
             var pct = estimate.EstimatedHitRatePct ?? estimate.HitRatePct;
             if (pct is null || pct < MinHitRatePct) continue;
+
+            // Veto: looks good on paper, but has gone cold recently — don't recommend it.
+            if (estimate.RecentGamesWithData >= MinRecentGamesForVeto
+                && estimate.RecentHitRatePct is not null
+                && estimate.RecentHitRatePct < RecentFormVetoPct) continue;
 
             candidates.Add(new HotBetEntry(
                 line.Player.Id,
