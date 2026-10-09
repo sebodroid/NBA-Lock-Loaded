@@ -82,7 +82,7 @@ public class AiPreviewService
         var awayTeam = await _db.Teams.FirstAsync(t => t.Id == game.AwayTeamId, ct);
         var line = await _db.GameLines.FirstOrDefaultAsync(l => l.GameId == game.Id, ct);
 
-        var statsStart = SeasonHelper.StatsStartDate(game.Sport, DateOnly.FromDateTime(DateTime.UtcNow));
+        var statsStart = SeasonHelper.StatsStartDate(game.Sport, ApiClock.Today);
         var homeSummary = await BuildTeamSummaryAsync(homeTeam, statsStart, ct);
         var awaySummary = await BuildTeamSummaryAsync(awayTeam, statsStart, ct);
 

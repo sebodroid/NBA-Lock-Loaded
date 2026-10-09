@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { format } from 'date-fns'
 import { useParams } from 'react-router-dom'
 import { Sparkles, ListChecks } from 'lucide-react'
@@ -59,7 +60,7 @@ function H2HRow({ game, homeTeamId }: { game: H2HGameEntry; homeTeamId: number }
   return (
     <tr className="border-b border-border/50">
       <td className="py-1 pr-2 tabular-nums text-muted-foreground text-[11px]">
-        {format(new Date(game.gameDate + 'T00:00:00'), 'M/d')}
+        {format(new Date(game.gameDate + 'T00:00:00'), 'M/d/yy')}
       </td>
       <td className="py-1 pr-2 tabular-nums text-[11px]">{scoreText}</td>
       <td className="py-1 pr-2 tabular-nums text-muted-foreground text-[11px]">
@@ -94,6 +95,14 @@ export function MatchupCard({ matchup }: MatchupCardProps) {
   const { data: props = [] } = useGameProps(matchup.gameId)
   const openGameProps = useAppStore(s => s.openGameProps)
   const openBetDraft = useAppStore(s => s.openBetDraft)
+
+  // Distinct players (not prop lines — one player can have several) flagged on the
+  // injury report for this game, surfaced right on the card so it doesn't take opening
+  // Player Props to notice someone might not suit up.
+  const injuredCount = useMemo(
+    () => new Set(props.filter(p => p.injuryStatus).map(p => p.playerId)).size,
+    [props]
+  )
 
   const homeBrand = getTeamBrand(sport ?? 'nfl', matchup.homeTeamAbbr)
   const awayBrand = getTeamBrand(sport ?? 'nfl', matchup.awayTeamAbbr)
@@ -254,13 +263,14 @@ export function MatchupCard({ matchup }: MatchupCardProps) {
 
         <Separator />
 
-        {/* Head-to-head history */}
+        {/* Head-to-head history — spans this season plus the last completed one, so the
+            date column (below) carries the year rather than a header range */}
         <div>
           <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-2">
-            Head to Head (2025–26)
+            Head to Head
           </p>
           {headToHead.length === 0 ? (
-            <p className="text-xs text-muted-foreground italic">No matchups yet this season</p>
+            <p className="text-xs text-muted-foreground italic">No recent matchups on record</p>
           ) : (
             <table className="w-full">
               <thead>
@@ -297,6 +307,12 @@ export function MatchupCard({ matchup }: MatchupCardProps) {
             >
               <ListChecks className="h-3.5 w-3.5 mr-1.5" />
               Player Props ({props.length})
+              {injuredCount > 0 && (
+                <span className="ml-1.5 rounded-full bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30
+                                  dark:text-yellow-400 px-1.5 py-0 text-[10px] font-semibold">
+                  {injuredCount} flagged
+                </span>
+              )}
             </Button>
           </>
         )}

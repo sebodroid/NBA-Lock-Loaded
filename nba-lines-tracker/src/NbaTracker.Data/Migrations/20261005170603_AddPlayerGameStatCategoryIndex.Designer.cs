@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using NbaTracker.Data;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace NbaTracker.Data.Migrations
 {
     [DbContext(typeof(NbaTrackerDbContext))]
-    partial class NbaTrackerDbContextModelSnapshot : ModelSnapshot
+    [Migration("20261005170603_AddPlayerGameStatCategoryIndex")]
+    partial class AddPlayerGameStatCategoryIndex
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -411,9 +414,6 @@ namespace NbaTracker.Data.Migrations
 
                     b.Property<int>("PlayerId")
                         .HasColumnType("integer");
-
-                    b.Property<string>("UnderBookmaker")
-                        .HasColumnType("text");
 
                     b.Property<int?>("UnderOdds")
                         .HasColumnType("integer");

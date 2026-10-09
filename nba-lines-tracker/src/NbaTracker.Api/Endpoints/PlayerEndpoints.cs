@@ -41,7 +41,7 @@ public static class PlayerEndpoints
             .FirstOrDefaultAsync(p => p.Id == id && p.Sport == sport, ct);
         if (player is null) return Results.NotFound();
 
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var today = ApiClock.Today;
         var statsStart = SeasonHelper.StatsStartDate(sport, today);
 
         var seasonRows = await db.PlayerGameStats
@@ -65,24 +65,44 @@ public static class PlayerEndpoints
             props.Add(await BuildPropEstimateAsync(player, line, statsStart, db, ct));
         }
 
+        var injuries = await InjuryLookup.GetForPlayersAsync(db, [player.Id], ct);
+        injuries.TryGetValue(player.Id, out var injury);
+
         return Results.Ok(new PlayerCardResponse(
             player.Id,
             player.Name,
             player.Team?.Abbreviation,
             seasonRows.Select(s => s.GameId).Distinct().Count(),
             seasonStats,
-            props
+            props,
+            injury.Status,
+            injury.Note
         ));
     }
 
+    // Reusable per-market league context: what every team allows in a stat category,
+    // computed once and shared across every prop line that asks about the same market —
+    // see BuildPropEstimateAsync's leagueCache parameter for why this exists.
+    internal record LeagueAllowedContext(Dictionary<int, List<decimal>> AllowedByTeam, decimal? LeagueAllowedAverage);
+
     // Internal, not private — GameEndpoints reuses this to list every prop for a game
     // (the "which players have props tonight" view), not just one player's own card.
+    //
+    // teamsById/leagueCache are optional, request-scoped caches a caller can share across
+    // many calls in a loop (HotBetsEndpoints does, across a whole week's props) — without
+    // them every call independently re-queries the team table and re-runs a league-wide
+    // aggregate query, which is fine for a single game/player but scales badly across a
+    // whole slate: many prop lines share the same market ("Receiving Yards" appears on
+    // most games), so the league-wide side of the computation is identical for all of
+    // them and only needs to run once per market, not once per prop line.
     internal static async Task<PropEstimate> BuildPropEstimateAsync(
         Player player,
         PlayerPropLine line,
         DateOnly statsStart,
         NbaTrackerDbContext db,
-        CancellationToken ct)
+        CancellationToken ct,
+        Dictionary<int, Team>? teamsById = null,
+        Dictionary<string, LeagueAllowedContext>? leagueCache = null)
     {
         int? opponentTeamId = player.TeamId switch
         {
@@ -91,13 +111,19 @@ public static class PlayerEndpoints
             _ => null   // player's last-known team doesn't match either side (stale/traded, or
                         // discovered via prop-name search before their first box score) — unknown
         };
-        var opponentTeam = opponentTeamId.HasValue
-            ? await db.Teams.FirstOrDefaultAsync(t => t.Id == opponentTeamId, ct)
-            : null;
+
+        Team? opponentTeam = null;
+        if (opponentTeamId.HasValue)
+        {
+            if (teamsById is not null)
+                teamsById.TryGetValue(opponentTeamId.Value, out opponentTeam);
+            else
+                opponentTeam = await db.Teams.FirstOrDefaultAsync(t => t.Id == opponentTeamId, ct);
+        }
 
         var mapping = PropMarketMapping.TryGetMapping(line.MarketKey);
         var label = mapping?.Label ?? PropMarketMapping.PrettifyKey(line.MarketKey);
-        var category = mapping?.Category ?? "Other";
+        var category = mapping?.DisplayCategory ?? "Other";
 
         // No stat mapping for this market yet — show it in the list with a readable label,
         // but there's no way to compute a history against it.
@@ -105,13 +131,13 @@ public static class PlayerEndpoints
         {
             return new PropEstimate(
                 line.Id, line.MarketKey, label, category, line.Line, line.OverOdds, line.UnderOdds,
-                line.Bookmaker, opponentTeam?.Abbreviation ?? "?", "current",
+                line.Bookmaker, line.UnderBookmaker, opponentTeam?.Abbreviation ?? "?", "current",
                 0, null, 0, null, null, null, null);
         }
 
         var keyword = mapping.Keyword.ToLower();
         var exclude = mapping.Exclude;
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var today = ApiClock.Today;
         var priorSeason = SeasonHelper.PriorCompletedSeason(player.Sport, today);
 
         // Category+keyword rows, fuzzy-matched (see PropMarketMapping for why this isn't an
@@ -120,7 +146,7 @@ public static class PlayerEndpoints
         IQueryable<PlayerGameStat> Scoped(bool prior)
         {
             var q = db.PlayerGameStats.Where(s =>
-                s.Category == mapping.Category
+                mapping.StatCategories.Contains(s.Category)
                 && s.StatName.ToLower().Contains(keyword)
                 && s.Value.HasValue);
             return prior
@@ -159,13 +185,59 @@ public static class PlayerEndpoints
         {
             return new PropEstimate(
                 line.Id, line.MarketKey, label, category, line.Line, line.OverOdds, line.UnderOdds,
-                line.Bookmaker, "?", statBasis,
+                line.Bookmaker, line.UnderBookmaker, "?", statBasis,
                 gamesWithData, seasonAverage, hitCount, hitRatePct, null, null, null);
         }
 
-        // League-wide rows for the same category+keyword and the same season basis as the
-        // player history above, used to compute what each team allows relative to average.
-        var leagueRowsRaw = await Scoped(statBasis == "prior")
+        // League-wide context for this market+season-basis — what every team allows,
+        // relative to average. Shared across every prop line asking about the same
+        // market when a leagueCache is provided, since this side of the computation
+        // doesn't depend on the specific player or line, only the market.
+        var cacheKey = $"{string.Join(',', mapping.StatCategories)}|{keyword}|{statBasis}";
+        LeagueAllowedContext leagueCtx;
+        if (leagueCache is not null && leagueCache.TryGetValue(cacheKey, out var cachedCtx))
+        {
+            leagueCtx = cachedCtx;
+        }
+        else
+        {
+            leagueCtx = await GetLeagueAllowedContextAsync(db, () => Scoped(statBasis == "prior"), exclude, ct);
+            if (leagueCache is not null) leagueCache[cacheKey] = leagueCtx;
+        }
+
+        decimal? leagueAllowedAverage = leagueCtx.LeagueAllowedAverage;
+        var opponentAllowedGames = leagueCtx.AllowedByTeam.TryGetValue(opponentTeamId!.Value, out var oGames)
+            ? oGames
+            : [];
+        decimal? opponentAllowedAverage = opponentAllowedGames.Count > 0
+            ? opponentAllowedGames.Average()
+            : null;
+
+        decimal? estimatedHitRatePct = null;
+        if (gamesWithData >= MinGamesForEstimate
+            && opponentAllowedAverage.HasValue
+            && leagueAllowedAverage is > 0)
+        {
+            var opponentFactor = opponentAllowedAverage.Value / leagueAllowedAverage.Value;
+            var adjustedLine = opponentFactor > 0 ? line.Line / opponentFactor : line.Line;
+            int adjustedHitCount = playerPerGame.Count(v => v > adjustedLine);
+            estimatedHitRatePct = Math.Round(100m * adjustedHitCount / gamesWithData, 1);
+        }
+
+        return new PropEstimate(
+            line.Id, line.MarketKey, label, category, line.Line, line.OverOdds, line.UnderOdds,
+            line.Bookmaker, line.UnderBookmaker, opponentTeam.Abbreviation, statBasis,
+            gamesWithData, seasonAverage, hitCount, hitRatePct,
+            opponentAllowedAverage, leagueAllowedAverage, estimatedHitRatePct);
+    }
+
+    // Runs the league-wide "what does every team allow in this stat" query once. Extracted
+    // out of BuildPropEstimateAsync so its result can be cached and shared across many prop
+    // lines for the same market (see BuildPropEstimateAsync's leagueCache parameter).
+    private static async Task<LeagueAllowedContext> GetLeagueAllowedContextAsync(
+        NbaTrackerDbContext db, Func<IQueryable<PlayerGameStat>> scopedQuery, string[] exclude, CancellationToken ct)
+    {
+        var leagueRowsRaw = await scopedQuery()
             .Select(s => new { s.PlayerId, s.GameId, s.TeamId, s.StatName, s.Value, s.Game.HomeTeamId, s.Game.AwayTeamId })
             .ToListAsync(ct);
 
@@ -190,34 +262,15 @@ public static class PlayerEndpoints
             .Select(g => new { g.Key.defenseTeamId, Allowed = g.Sum(x => x.Value) })
             .ToList();
 
+        var allowedByTeam = allowedPerTeamGame
+            .GroupBy(x => x.defenseTeamId)
+            .ToDictionary(g => g.Key, g => g.Select(x => x.Allowed).ToList());
+
         decimal? leagueAllowedAverage = allowedPerTeamGame.Count > 0
             ? allowedPerTeamGame.Average(x => x.Allowed)
             : null;
 
-        var opponentAllowedGames = allowedPerTeamGame
-            .Where(x => x.defenseTeamId == opponentTeamId!.Value)
-            .Select(x => x.Allowed)
-            .ToList();
-        decimal? opponentAllowedAverage = opponentAllowedGames.Count > 0
-            ? opponentAllowedGames.Average()
-            : null;
-
-        decimal? estimatedHitRatePct = null;
-        if (gamesWithData >= MinGamesForEstimate
-            && opponentAllowedAverage.HasValue
-            && leagueAllowedAverage is > 0)
-        {
-            var opponentFactor = opponentAllowedAverage.Value / leagueAllowedAverage.Value;
-            var adjustedLine = opponentFactor > 0 ? line.Line / opponentFactor : line.Line;
-            int adjustedHitCount = playerPerGame.Count(v => v > adjustedLine);
-            estimatedHitRatePct = Math.Round(100m * adjustedHitCount / gamesWithData, 1);
-        }
-
-        return new PropEstimate(
-            line.Id, line.MarketKey, label, category, line.Line, line.OverOdds, line.UnderOdds,
-            line.Bookmaker, opponentTeam.Abbreviation, statBasis,
-            gamesWithData, seasonAverage, hitCount, hitRatePct,
-            opponentAllowedAverage, leagueAllowedAverage, estimatedHitRatePct);
+        return new LeagueAllowedContext(allowedByTeam, leagueAllowedAverage);
     }
 
     // Per-game values for a stat query: one number per game, taking the largest matching
@@ -254,7 +307,7 @@ public static class PlayerEndpoints
         if (!Categories.Contains(category))
             return Results.NotFound(new { error = $"Unknown category: {category}" });
 
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var today = ApiClock.Today;
         var (resolvedSeason, statsStart) = SeasonHelper.ResolveSeasonWindow(sport, season, today);
 
         var rows = await db.PlayerGameStats

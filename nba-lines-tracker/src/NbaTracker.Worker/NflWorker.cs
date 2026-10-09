@@ -100,6 +100,18 @@ public class NflWorker : BackgroundService
             await RunSyncForDateAsync(d, ct);
             if (ct.IsCancellationRequested) return;
         }
+
+        await RunInjurySyncAsync(ct);
+    }
+
+    // Not date-scoped like everything else here — the injury report is a current
+    // snapshot, not something tied to a specific day's games — so this runs once per
+    // cycle rather than once per date in the rolling window.
+    private async Task RunInjurySyncAsync(CancellationToken ct)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var orchestrator = scope.ServiceProvider.GetRequiredService<NflSyncOrchestrator>();
+        await orchestrator.SyncInjuriesAsync(ct);
     }
 
     private async Task RunGapDetectionAsync(CancellationToken ct)

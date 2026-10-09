@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Separator } from '@/components/ui/separator'
+import { InjuryBadge } from '@/components/ui/injury-badge'
 import { useAppStore } from '@/store/useAppStore'
 import { usePlayerCard } from '@/api/players'
 import type { PropEstimate } from '@/types/api'
@@ -30,9 +31,16 @@ function PropCard({ prop }: { prop: PropEstimate }) {
       </CardHeader>
       <CardContent className="space-y-3 text-sm">
         <div className="flex justify-between text-xs text-muted-foreground">
-          <span>Over {americanOdds(prop.overOdds)}</span>
-          <span>Under {americanOdds(prop.underOdds)}</span>
-          <span className="capitalize">{prop.bookmaker}</span>
+          <span>
+            Over {americanOdds(prop.overOdds)}{' '}
+            <span className="capitalize">({prop.bookmaker})</span>
+          </span>
+          <span>
+            Under {americanOdds(prop.underOdds)}{' '}
+            {prop.underBookmaker && (
+              <span className="capitalize">({prop.underBookmaker})</span>
+            )}
+          </span>
         </div>
 
         <Separator />
@@ -131,9 +139,12 @@ export function PlayerCardModal() {
         >
           <div className="flex items-start justify-between mb-4">
             <div>
-              <Dialog.Title className="text-xl font-bold">
-                {player?.name ?? (isLoading ? 'Loading…' : 'Player')}
-              </Dialog.Title>
+              <div className="flex items-center gap-2">
+                <Dialog.Title className="text-xl font-bold">
+                  {player?.name ?? (isLoading ? 'Loading…' : 'Player')}
+                </Dialog.Title>
+                {player && <InjuryBadge status={player.injuryStatus} note={player.injuryNote} />}
+              </div>
               {player && (
                 <p className="text-sm text-muted-foreground">
                   {player.teamAbbreviation ?? 'Free agent'} · {player.gamesPlayed} game

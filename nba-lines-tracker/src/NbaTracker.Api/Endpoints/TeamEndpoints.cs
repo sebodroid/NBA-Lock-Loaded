@@ -30,7 +30,7 @@ public static class TeamEndpoints
         // Once the season starts, preseason games drop out of stats automatically —
         // unless a specific past season was requested, which always gets its full window
         var (resolvedSeason, statsStart) = SeasonHelper.ResolveSeasonWindow(
-            sport, season, DateOnly.FromDateTime(DateTime.UtcNow));
+            sport, season, ApiClock.Today);
 
         // Load all FINAL games with results in ONE query, scoped to this sport
         // AtsResult/OuResult enum comparisons happen in C# below, not in this EF query
@@ -128,7 +128,7 @@ public static class TeamEndpoints
         if (team is null) return Results.NotFound();
 
         var (resolvedSeason, statsStart) = SeasonHelper.ResolveSeasonWindow(
-            sport, season, DateOnly.FromDateTime(DateTime.UtcNow));
+            sport, season, ApiClock.Today);
 
         // Two targeted queries (one for home games, one for away) — avoids loading all rows
         var homeGames = await db.Games
@@ -169,7 +169,7 @@ public static class TeamEndpoints
         if (!exists) return Results.NotFound();
 
         var (resolvedSeason, statsStart) = SeasonHelper.ResolveSeasonWindow(
-            sport, season, DateOnly.FromDateTime(DateTime.UtcNow));
+            sport, season, ApiClock.Today);
 
         // Load game details — Include navigation properties needed for the DTO projection
         // Do NOT project AtsResult/OuResult enums in the LINQ Select — materialize first, project in C#

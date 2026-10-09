@@ -107,6 +107,45 @@ builder.Services.AddHttpClient<NflStatsClient>(client =>
     pipeline.AddTimeout(TimeSpan.FromSeconds(30));
 });
 
+// ESPN public site API — no key, used only for injury status. Its Akamai-fronted edge
+// occasionally 403s requests that look bot-like (observed inconsistently — sometimes a
+// bare request succeeds, sometimes an identical one with different headers doesn't, which
+// points to scoring/rate-limiting rather than one specific missing header). A realistic
+// browser header set reduces how often that happens; the retry policy below covers the
+// rest, and SyncInjuriesAsync itself treats any remaining failure as skip-this-cycle,
+// never a hard sync failure — this is a nice-to-have, not core data.
+builder.Services.AddHttpClient<EspnInjuryClient>(client =>
+{
+    client.BaseAddress = new Uri("https://site.api.espn.com/");
+    client.Timeout = TimeSpan.FromSeconds(30);
+    client.DefaultRequestHeaders.UserAgent.ParseAdd(
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
+    client.DefaultRequestHeaders.Accept.ParseAdd("application/json, text/plain, */*");
+    client.DefaultRequestHeaders.Referrer = new Uri("https://www.espn.com/");
+})
+.AddResilienceHandler("EspnRetry", pipeline =>
+{
+    pipeline.AddRetry(new HttpRetryStrategyOptions
+    {
+        MaxRetryAttempts = 4,
+        BackoffType = DelayBackoffType.Exponential,
+        UseJitter = true,
+        Delay = TimeSpan.FromSeconds(3),
+        // 403 isn't in Polly's default "transient" set (it assumes permission failures
+        // are permanent) — but here it's most often a bot-score fluke, worth retrying.
+        // Still covers the usual transient cases (5xx, network errors) alongside it.
+        ShouldHandle = args =>
+        {
+            var status = args.Outcome.Result?.StatusCode;
+            bool transient = status == System.Net.HttpStatusCode.Forbidden
+                || (status is not null && (int)status.Value >= 500)
+                || args.Outcome.Exception is HttpRequestException;
+            return ValueTask.FromResult(transient);
+        }
+    });
+    pipeline.AddTimeout(TimeSpan.FromSeconds(30));
+});
+
 // The Odds API — shared by NBA and MLB, sport key passed per call
 builder.Services.AddHttpClient<OddsApiClient>(client =>
 {

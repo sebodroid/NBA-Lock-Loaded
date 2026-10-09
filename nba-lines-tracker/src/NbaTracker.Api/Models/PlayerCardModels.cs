@@ -8,7 +8,8 @@ public record PropEstimate(
     decimal Line,
     int? OverOdds,
     int? UnderOdds,
-    string Bookmaker,
+    string Bookmaker,          // Over side's best-priced book
+    string? UnderBookmaker,    // Under side's best-priced book — can differ from Bookmaker
     string OpponentAbbreviation,
 
     // Which season the history numbers below are drawn from: "current" once the player
@@ -39,7 +40,9 @@ public record PlayerCardResponse(
     string? TeamAbbreviation,
     int GamesPlayed,
     Dictionary<string, decimal> SeasonStats,
-    List<PropEstimate> UpcomingProps
+    List<PropEstimate> UpcomingProps,
+    string? InjuryStatus,   // "Questionable" | "Doubtful" | "Out" | "Injured Reserve" | null (not listed)
+    string? InjuryNote
 );
 
 // One player's prop line within the context of a specific game — the direct
@@ -50,7 +53,9 @@ public record GamePropEntry(
     int PlayerId,
     string PlayerName,
     string? TeamAbbreviation,
-    PropEstimate Estimate
+    PropEstimate Estimate,
+    string? InjuryStatus,
+    string? InjuryNote
 );
 
 // One prop line surfaced on the "Hot Bets" list — same shape as GamePropEntry plus the
@@ -62,5 +67,7 @@ public record HotBetEntry(
     int GameId,
     string GameLabel,
     string GameDate,
-    PropEstimate Estimate
+    PropEstimate Estimate,
+    string? InjuryStatus,
+    string? InjuryNote
 );

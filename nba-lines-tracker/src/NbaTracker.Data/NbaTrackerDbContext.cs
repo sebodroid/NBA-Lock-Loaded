@@ -20,6 +20,7 @@ public class NbaTrackerDbContext : DbContext
     public DbSet<GamePreview> GamePreviews => Set<GamePreview>();
     public DbSet<PlayerPropLine> PlayerPropLines => Set<PlayerPropLine>();
     public DbSet<Bet> Bets => Set<Bet>();
+    public DbSet<PlayerInjuryStatus> PlayerInjuryStatuses => Set<PlayerInjuryStatus>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -114,6 +115,12 @@ public class NbaTrackerDbContext : DbContext
             .HasIndex(s => s.GameId);
         modelBuilder.Entity<PlayerGameStat>()
             .HasIndex(s => new { s.PlayerId, s.Category, s.StatName });
+        // League-wide queries (Hot Bets, prop estimates) scan "every player's stats in
+        // this category," never filtered by PlayerId first — the composite index above
+        // can't help them since Postgres can't use a non-leading column as a seek key.
+        // One month into the season this had become the dominant cost of Hot Bets.
+        modelBuilder.Entity<PlayerGameStat>()
+            .HasIndex(s => s.Category);
 
         modelBuilder.Entity<GamePreview>()
             .HasOne(p => p.Game)
@@ -175,5 +182,16 @@ public class NbaTrackerDbContext : DbContext
 
         modelBuilder.Entity<Bet>()
             .HasIndex(b => new { b.Sport, b.PlacedAt });
+
+        // PlayerInjuryStatus — one row per injured player, replaced wholesale each sync
+        modelBuilder.Entity<PlayerInjuryStatus>()
+            .HasOne(i => i.Player)
+            .WithMany()
+            .HasForeignKey(i => i.PlayerId)
+            .OnDelete(DeleteBehavior.Cascade);   // no separate identity worth keeping once the player row is gone
+
+        modelBuilder.Entity<PlayerInjuryStatus>()
+            .HasIndex(i => i.PlayerId)
+            .IsUnique();
     }
 }

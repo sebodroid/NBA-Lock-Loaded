@@ -1,6 +1,7 @@
 import { Flame } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
+import { InjuryBadge } from '@/components/ui/injury-badge'
 import { useHotBets } from '@/api/hotBets'
 import { useAppStore } from '@/store/useAppStore'
 
@@ -46,12 +47,15 @@ export function HotBetsPage() {
                 <CardContent className="p-4 space-y-2">
                   <div className="flex items-start justify-between">
                     <div>
-                      <button
-                        onClick={() => openPlayerCard(hb.playerId)}
-                        className="text-sm font-semibold hover:underline"
-                      >
-                        {hb.playerName}
-                      </button>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => openPlayerCard(hb.playerId)}
+                          className="text-sm font-semibold hover:underline"
+                        >
+                          {hb.playerName}
+                        </button>
+                        <InjuryBadge status={hb.injuryStatus} note={hb.injuryNote} />
+                      </div>
                       <p className="text-xs text-muted-foreground">
                         {hb.teamAbbreviation ?? '–'} · {hb.gameLabel} · {hb.gameDate}
                       </p>
@@ -85,9 +89,10 @@ export function HotBetsPage() {
                       label: `${hb.playerName} — ${e.marketLabel} Over ${e.line}`,
                       oddsPreview: e.overOdds ?? -110,
                     })}
+                    title={`Best price via ${e.bookmaker}`}
                     className="w-full rounded border px-2 py-1.5 text-xs font-medium hover:bg-accent"
                   >
-                    Bet Over {e.line} ({americanOdds(e.overOdds)})
+                    Bet Over {e.line} ({americanOdds(e.overOdds)}) <span className="capitalize text-muted-foreground">· {e.bookmaker}</span>
                   </button>
                 </CardContent>
               </Card>

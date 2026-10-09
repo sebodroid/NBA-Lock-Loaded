@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using NbaTracker.Api.Models;
 using NbaTracker.Data;
+using NbaTracker.Data.Entities;
 
 namespace NbaTracker.Api.Endpoints;
 
@@ -32,7 +33,7 @@ public static class HotBetsEndpoints
 
         limit = Math.Clamp(limit, 1, 25);
 
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var today = ApiClock.Today;
         var endDate = today.AddDays(LookaheadDays - 1);
         var statsStart = SeasonHelper.StatsStartDate(sport, today);
 
@@ -47,10 +48,30 @@ public static class HotBetsEndpoints
                      && l.Game.Status != "POSTPONED")
             .ToListAsync(ct);
 
+        var injuries = await InjuryLookup.GetForPlayersAsync(db, lines.Select(l => l.PlayerId), ct);
+
+        // A player ruled Out (or on IR) shouldn't be "recommended" at all — Questionable/
+        // Doubtful still show up, just tagged, since those players often do end up playing.
+        static bool IsOut(string? status) => status is "Out" or "Injured Reserve";
+
+        // Shared across every prop line below — this is the fix for Hot Bets being slow:
+        // without these, BuildPropEstimateAsync independently re-queries the team table and
+        // re-runs a league-wide aggregate query for every single prop line, even though a
+        // whole week's slate has many lines sharing the same market (every game's
+        // "Receiving Yards" prop asks the identical league-wide question). Computing each
+        // market's league context once and reusing it here cuts what used to be dozens of
+        // redundant full-league queries down to one per distinct market.
+        var teamsById = await db.Teams.Where(t => t.Sport == sport).ToDictionaryAsync(t => t.Id, ct);
+        var leagueCache = new Dictionary<string, PlayerEndpoints.LeagueAllowedContext>();
+
         var candidates = new List<HotBetEntry>();
         foreach (var line in lines)
         {
-            var estimate = await PlayerEndpoints.BuildPropEstimateAsync(line.Player, line, statsStart, db, ct);
+            injuries.TryGetValue(line.PlayerId, out var injury);
+            if (IsOut(injury.Status)) continue;
+
+            var estimate = await PlayerEndpoints.BuildPropEstimateAsync(
+                line.Player, line, statsStart, db, ct, teamsById, leagueCache);
             if (estimate.GamesWithData < PlayerEndpoints.MinGamesForEstimate) continue;
 
             var pct = estimate.EstimatedHitRatePct ?? estimate.HitRatePct;
@@ -63,7 +84,9 @@ public static class HotBetsEndpoints
                 line.Game.Id,
                 $"{line.Game.AwayTeam.Abbreviation} @ {line.Game.HomeTeam.Abbreviation}",
                 line.Game.GameDate.ToString("yyyy-MM-dd"),
-                estimate
+                estimate,
+                injury.Status,
+                injury.Note
             ));
         }
 

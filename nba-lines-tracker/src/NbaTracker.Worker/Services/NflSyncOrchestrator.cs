@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using NbaTracker.Data;
 using NbaTracker.Data.Entities;
+using NbaTracker.Worker.Models.Espn;
 using NbaTracker.Worker.Models.NflStats;
 using NbaTracker.Worker.Models.OddsApi;
 
@@ -12,6 +13,7 @@ public class NflSyncOrchestrator
     private readonly NbaTrackerDbContext _db;
     private readonly NflStatsClient _nflClient;
     private readonly OddsApiClient _oddsClient;
+    private readonly EspnInjuryClient _injuryClient;
     private readonly IConfiguration _config;
     private readonly ILogger<NflSyncOrchestrator> _logger;
 
@@ -24,10 +26,17 @@ public class NflSyncOrchestrator
     private static readonly string[] PropMarkets =
     [
         "player_pass_yds", "player_pass_tds", "player_pass_completions",
-        "player_rush_yds", "player_rush_attempts",
-        "player_reception_yds", "player_receptions",
+        "player_rush_yds", "player_rush_attempts", "player_rush_longest",
+        "player_reception_yds", "player_receptions", "player_reception_longest",
         "player_sacks", "player_solo_tackles",
+        "player_anytime_td",
     ];
+
+    // The only single-sided market in PropMarkets — outcomes are "Yes"/price per player,
+    // no "Under" side and no real sportsbook-set line. Modeled as Over 0.5 so the existing
+    // Over/Under grading (actual > line) works unchanged: 1+ TD clears it.
+    private const string AnytimeTdMarketKey = "player_anytime_td";
+    private const decimal AnytimeTdImpliedLine = 0.5m;
 
     // Broader than the primary/fallback pair used for spreads/totals — lower-profile
     // games (preseason especially) often only get props posted by a subset of books,
@@ -40,12 +49,14 @@ public class NflSyncOrchestrator
         NbaTrackerDbContext db,
         NflStatsClient nflClient,
         OddsApiClient oddsClient,
+        EspnInjuryClient injuryClient,
         IConfiguration config,
         ILogger<NflSyncOrchestrator> logger)
     {
         _db = db;
         _nflClient = nflClient;
         _oddsClient = oddsClient;
+        _injuryClient = injuryClient;
         _config = config;
         _logger = logger;
     }
@@ -360,6 +371,13 @@ public class NflSyncOrchestrator
     /// error) if props aren't available yet — normal for preseason and far-out games,
     /// since sportsbooks post player props close to kickoff.
     /// </summary>
+    /// <summary>
+    /// Shops every market across every trusted book that posted it, rather than locking
+    /// the whole game to one "canonical" bookmaker — the best price for a player's Over
+    /// and the best price for the same player's Under can legitimately come from two
+    /// different books, and there's no extra cost to checking: the single Odds API call
+    /// below already returns every trusted book's numbers at once.
+    /// </summary>
     private async Task SyncPlayerPropsAsync(Game game, string sportKey, CancellationToken ct)
     {
         if (game.OddsApiGameId is null || game.Status == "POSTPONED") return;
@@ -372,39 +390,84 @@ public class NflSyncOrchestrator
             return;
         }
 
-        var bookmaker = OddsApiClient.SelectCanonicalBookmaker(propsEvent.Bookmakers, PropBookmakerPriority);
-        if (bookmaker is null)
+        if (propsEvent.Bookmakers.Count == 0)
         {
             // Normal for lower-profile games (e.g. preseason finales) — sportsbooks
             // often don't post player props for them at all, not a pipeline failure.
             _logger.LogInformation(
-                "[NFL] No player props posted for game {GameId} by any of [{Books}] ({BookmakerCount} bookmakers returned)",
-                game.Id, string.Join(", ", PropBookmakerPriority), propsEvent.Bookmakers.Count);
+                "[NFL] No player props posted for game {GameId} by any of [{Books}]",
+                game.Id, string.Join(", ", PropBookmakerPriority));
             return;
         }
 
-        _logger.LogInformation("[NFL] Props found for game {GameId}: {MarketCount} markets from {Bookmaker}",
-            game.Id, bookmaker.Markets.Count, bookmaker.Key);
+        _logger.LogInformation("[NFL] Props found for game {GameId}: {BookCount} bookmakers posted lines",
+            game.Id, propsEvent.Bookmakers.Count);
 
         int matchedCount = 0, unmatchedCount = 0;
+        var marketKeys = propsEvent.Bookmakers.SelectMany(b => b.Markets.Select(m => m.Key)).Distinct();
 
-        foreach (var market in bookmaker.Markets)
+        foreach (var marketKey in marketKeys)
         {
-            // Prop outcomes come as Over/Under pairs per player, keyed by Description
-            var byPlayer = market.Outcomes
-                .Where(o => !string.IsNullOrEmpty(o.Description))
-                .GroupBy(o => o.Description!);
+            var isAnytimeTd = marketKey == AnytimeTdMarketKey;
+
+            // Every (book, outcome) pair across every bookmaker, for this one market —
+            // the shopping pool. Outcomes without a player name (team-level markets, if
+            // any slipped into PropMarkets) aren't props and are excluded.
+            var pool = propsEvent.Bookmakers
+                .SelectMany(b => b.Markets
+                    .Where(m => m.Key == marketKey)
+                    .SelectMany(m => m.Outcomes.Select(o => (BookKey: b.Key, Outcome: o))))
+                .Where(x => !string.IsNullOrEmpty(x.Outcome.Description))
+                .ToList();
+
+            var byPlayer = pool.GroupBy(x => x.Outcome.Description!);
 
             foreach (var group in byPlayer)
             {
-                var over  = group.FirstOrDefault(o => o.Name == "Over");
-                var under = group.FirstOrDefault(o => o.Name == "Under");
-                if (over?.Point is null) continue;
+                (string BookKey, OddsApiOutcome Outcome) over;
+                (string BookKey, OddsApiOutcome Outcome)? under = null;
+                decimal line;
 
-                // Odds API sometimes includes periods in initials ("A.J. Brown") where
-                // Highlightly doesn't ("AJ Brown") — strip them before matching; periods
-                // don't distinguish between different real people, so this is safe.
-                var normalizedName = group.Key.Replace(".", "");
+                if (isAnytimeTd)
+                {
+                    // Single-sided — pick whichever book pays the most for "Yes."
+                    var yesCandidates = group
+                        .Where(x => x.Outcome.Name.Equals("Yes", StringComparison.OrdinalIgnoreCase))
+                        .ToList();
+                    if (yesCandidates.Count == 0) continue;
+                    over = yesCandidates.MaxBy(x => x.Outcome.Price);
+                    line = AnytimeTdImpliedLine;
+                }
+                else
+                {
+                    var overCandidates = group
+                        .Where(x => x.Outcome.Name == "Over" && x.Outcome.Point.HasValue)
+                        .ToList();
+                    if (overCandidates.Count == 0) continue;
+
+                    // Books can quote slightly different lines for the same player — shop
+                    // for the best price only among books agreeing on whichever number
+                    // most of them posted, never comparing a price at one line against a
+                    // price at another.
+                    var commonLine = overCandidates
+                        .GroupBy(x => x.Outcome.Point!.Value)
+                        .OrderByDescending(g => g.Count())
+                        .First().Key;
+
+                    var overAtLine = overCandidates.Where(x => x.Outcome.Point == commonLine).ToList();
+                    over = overAtLine.MaxBy(x => x.Outcome.Price);
+
+                    var underAtLine = group
+                        .Where(x => x.Outcome.Name == "Under" && x.Outcome.Point == commonLine)
+                        .ToList();
+                    under = underAtLine.Count > 0 ? underAtLine.MaxBy(x => x.Outcome.Price) : null;
+
+                    line = commonLine;
+                }
+
+                // See NormalizeName — Odds API sometimes includes periods in initials
+                // ("A.J. Brown") where Highlightly doesn't ("AJ Brown").
+                var normalizedName = NormalizeName(group.Key);
 
                 var player = await _db.Players.FirstOrDefaultAsync(
                     p => p.Sport == "NFL" && p.Name.ToLower() == normalizedName.ToLower(), ct);
@@ -415,38 +478,40 @@ public class NflSyncOrchestrator
                 {
                     unmatchedCount++;
                     _logger.LogInformation("[NFL] Prop line for unrecognized player: '{Name}' ({Market})",
-                        group.Key, market.Key);
+                        group.Key, marketKey);
                     continue;
                 }
 
                 matchedCount++;
 
                 var existing = await _db.PlayerPropLines.FirstOrDefaultAsync(
-                    l => l.GameId == game.Id && l.PlayerId == player.Id && l.MarketKey == market.Key, ct);
+                    l => l.GameId == game.Id && l.PlayerId == player.Id && l.MarketKey == marketKey, ct);
 
                 if (existing is null)
                 {
                     _db.PlayerPropLines.Add(new PlayerPropLine
                     {
-                        GameId        = game.Id,
-                        PlayerId      = player.Id,
-                        MarketKey     = market.Key,
-                        Line          = over.Point.Value,
-                        OverOdds      = (int)Math.Round(over.Price),
-                        UnderOdds     = under is not null ? (int)Math.Round(under.Price) : null,
-                        Bookmaker     = bookmaker.Key,
-                        LineTimestamp = DateTime.UtcNow,
-                        UpdatedAt     = DateTime.UtcNow
+                        GameId         = game.Id,
+                        PlayerId       = player.Id,
+                        MarketKey      = marketKey,
+                        Line           = line,
+                        OverOdds       = (int)Math.Round(over.Outcome.Price),
+                        UnderOdds      = under is not null ? (int)Math.Round(under.Value.Outcome.Price) : null,
+                        Bookmaker      = over.BookKey,
+                        UnderBookmaker = under?.BookKey,
+                        LineTimestamp  = DateTime.UtcNow,
+                        UpdatedAt      = DateTime.UtcNow
                     });
                 }
                 else
                 {
-                    existing.Line          = over.Point.Value;
-                    existing.OverOdds      = (int)Math.Round(over.Price);
-                    existing.UnderOdds     = under is not null ? (int)Math.Round(under.Price) : null;
-                    existing.Bookmaker     = bookmaker.Key;
-                    existing.LineTimestamp = DateTime.UtcNow;
-                    existing.UpdatedAt     = DateTime.UtcNow;
+                    existing.Line           = line;
+                    existing.OverOdds       = (int)Math.Round(over.Outcome.Price);
+                    existing.UnderOdds      = under is not null ? (int)Math.Round(under.Value.Outcome.Price) : null;
+                    existing.Bookmaker      = over.BookKey;
+                    existing.UnderBookmaker = under?.BookKey;
+                    existing.LineTimestamp  = DateTime.UtcNow;
+                    existing.UpdatedAt      = DateTime.UtcNow;
                 }
             }
         }
@@ -454,6 +519,83 @@ public class NflSyncOrchestrator
         await _db.SaveChangesAsync(ct);
         _logger.LogInformation("[NFL] Props for game {GameId}: {Matched} matched, {Unmatched} unrecognized players",
             game.Id, matchedCount, unmatchedCount);
+    }
+
+    /// <summary>
+    /// Refreshes the injury report from ESPN — not date-scoped (unlike everything else
+    /// in this class), so called once per sync cycle rather than once per date in the
+    /// rolling window. A failure here never fails the whole sync; injury status is a nice
+    /// extra, not core data.
+    /// </summary>
+    public async Task SyncInjuriesAsync(CancellationToken ct)
+    {
+        List<EspnInjuryEntry> entries;
+        try
+        {
+            entries = await _injuryClient.GetNflInjuriesAsync(ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[NFL] Failed to fetch injury report — skipping this cycle");
+            return;
+        }
+
+        // "Active" just means ESPN still ran a recap blurb on them, healthy or not — only
+        // the real designations are worth storing.
+        var flagged = entries
+            .Where(e => !string.Equals(e.Status, "Active", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        var allPlayers = await _db.Players.Where(p => p.Sport == "NFL").ToListAsync(ct);
+        var playerByName = allPlayers
+            .GroupBy(p => NormalizeName(p.Name).ToLower())
+            .Where(g => g.Count() == 1)   // skip ambiguous duplicate names rather than guess
+            .ToDictionary(g => g.Key, g => g.First());
+
+        var existingByPlayerId = await _db.PlayerInjuryStatuses.ToDictionaryAsync(i => i.PlayerId, ct);
+
+        int matched = 0, unmatched = 0;
+        var seenPlayerIds = new HashSet<int>();
+
+        foreach (var entry in flagged)
+        {
+            if (!playerByName.TryGetValue(NormalizeName(entry.Athlete.DisplayName).ToLower(), out var player))
+            {
+                unmatched++;
+                _logger.LogInformation("[NFL] Injury report entry for unrecognized player: '{Name}' ({Status})",
+                    entry.Athlete.DisplayName, entry.Status);
+                continue;
+            }
+
+            matched++;
+            seenPlayerIds.Add(player.Id);
+
+            if (existingByPlayerId.TryGetValue(player.Id, out var existing))
+            {
+                existing.Status = entry.Status;
+                existing.Note = entry.ShortComment;
+                existing.UpdatedAt = DateTime.UtcNow;
+            }
+            else
+            {
+                _db.PlayerInjuryStatuses.Add(new PlayerInjuryStatus
+                {
+                    PlayerId = player.Id,
+                    Status = entry.Status,
+                    Note = entry.ShortComment,
+                    UpdatedAt = DateTime.UtcNow
+                });
+            }
+        }
+
+        // Clear anyone no longer on the report (recovered, activated, or dropped).
+        var stale = existingByPlayerId.Values.Where(i => !seenPlayerIds.Contains(i.PlayerId)).ToList();
+        if (stale.Count > 0) _db.PlayerInjuryStatuses.RemoveRange(stale);
+
+        await _db.SaveChangesAsync(ct);
+        _logger.LogInformation(
+            "[NFL] Injury report: {Matched} matched, {Unmatched} unrecognized names, {Cleared} cleared",
+            matched, unmatched, stale.Count);
     }
 
     /// <summary>
@@ -467,7 +609,7 @@ public class NflSyncOrchestrator
     private async Task<Player?> FindOrCreatePlayerByNameAsync(string name, CancellationToken ct)
     {
         var results = await _nflClient.SearchPlayerByNameAsync(name, ct);
-        var exact = results.Where(r => string.Equals(r.FullName, name, StringComparison.OrdinalIgnoreCase)).ToList();
+        var exact = results.Where(r => string.Equals(NormalizeName(r.FullName), name, StringComparison.OrdinalIgnoreCase)).ToList();
         if (exact.Count != 1)
         {
             _logger.LogInformation(
@@ -502,6 +644,22 @@ public class NflSyncOrchestrator
     // -------------------------------------------------------------------------
     // Private helpers
     // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// Strips punctuation that different data providers encode inconsistently for the
+    /// same real person before any name comparison in this file: periods in initials
+    /// ("A.J." vs "AJ"), and straight vs curly apostrophes — Odds API/Highlightly use a
+    /// plain "'" (U+0027), but ESPN's injury feed uses a curly right single quote
+    /// (U+2019) for names like "Ja'Kobi Lane", which silently fails a naive string
+    /// comparison even though it's the same person. Not a fuzzy match: two different
+    /// real people who reduce to the same normalized name are still genuinely ambiguous,
+    /// and every caller here refuses to guess between them.
+    /// </summary>
+    private static string NormalizeName(string name) =>
+        name.Replace(".", "")
+            .Replace('’', '\'')
+            .Replace('‘', '\'')
+            .Trim();
 
     /// <summary>
     /// Whether a date falls before that NFL season's own regular-season start —

@@ -3,12 +3,13 @@ import { Dialog } from 'radix-ui'
 import { X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
+import { InjuryBadge } from '@/components/ui/injury-badge'
 import { useAppStore } from '@/store/useAppStore'
 import { useGameProps } from '@/api/games'
-import type { GamePropEntry } from '@/types/api'
+import type { GamePropEntry, InjuryStatus } from '@/types/api'
 
 // Fixed tab order; anything the API tags "Other" collects unmapped markets.
-const CATEGORY_ORDER = ['Receiving', 'Passing', 'Rushing', 'Defense', 'Other']
+const CATEGORY_ORDER = ['Receiving', 'Passing', 'Rushing', 'Touchdowns', 'Defense', 'Other']
 
 function americanOdds(v: number | null): string {
   if (v === null) return '–'
@@ -19,6 +20,8 @@ interface PlayerGroup {
   playerId: number
   name: string
   team: string | null
+  injuryStatus: InjuryStatus
+  injuryNote: string | null
   lines: GamePropEntry[]
 }
 
@@ -63,7 +66,14 @@ export function GamePropsModal() {
       if (existing) {
         existing.lines.push(p)
       } else {
-        map.set(p.playerId, { playerId: p.playerId, name: p.playerName, team: p.teamAbbreviation, lines: [p] })
+        map.set(p.playerId, {
+          playerId: p.playerId,
+          name: p.playerName,
+          team: p.teamAbbreviation,
+          injuryStatus: p.injuryStatus,
+          injuryNote: p.injuryNote,
+          lines: [p],
+        })
       }
     }
     return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name))
@@ -129,12 +139,15 @@ export function GamePropsModal() {
                 {byPlayer.map(p => (
                   <div key={p.playerId} className="rounded-md border p-3">
                     <div className="flex items-center justify-between mb-1.5">
-                      <button
-                        onClick={() => openPlayerCard(p.playerId)}
-                        className="text-sm font-semibold hover:underline"
-                      >
-                        {p.name}
-                      </button>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => openPlayerCard(p.playerId)}
+                          className="text-sm font-semibold hover:underline"
+                        >
+                          {p.name}
+                        </button>
+                        <InjuryBadge status={p.injuryStatus} note={p.injuryNote} />
+                      </div>
                       <span className="text-xs text-muted-foreground">{p.team ?? '–'}</span>
                     </div>
                     <table className="w-full text-xs">
@@ -152,6 +165,7 @@ export function GamePropsModal() {
                                 <div className="flex gap-1">
                                   <button
                                     disabled={e.overOdds === null}
+                                    title={`Best price via ${e.bookmaker}`}
                                     onClick={() => openBetDraft({
                                       gameId: game!.id,
                                       kind: 'PlayerProp',
@@ -167,6 +181,7 @@ export function GamePropsModal() {
                                   </button>
                                   <button
                                     disabled={e.underOdds === null}
+                                    title={e.underBookmaker ? `Best price via ${e.underBookmaker}` : undefined}
                                     onClick={() => openBetDraft({
                                       gameId: game!.id,
                                       kind: 'PlayerProp',

@@ -25,6 +25,27 @@ public record H2HGameEntry(
     string? OuResult       // "Over" / "Under" / "Push" / null
 );
 
+// Lightweight game listing for the manual-bet game picker — a bet might be for a game
+// already played (logging a bet made elsewhere after the fact) or one still upcoming.
+public record GameListEntry(
+    int GameId,
+    string GameDate,
+    string Status,
+    int HomeTeamId,
+    string HomeTeamAbbr,
+    string HomeTeamName,
+    int AwayTeamId,
+    string AwayTeamAbbr,
+    string AwayTeamName
+);
+
+// One roster entry for the manual player-prop bet picker.
+public record GamePlayerEntry(
+    int PlayerId,
+    string Name,
+    string? TeamAbbreviation
+);
+
 public record TodayMatchupResponse(
     int GameId,
     string Status,

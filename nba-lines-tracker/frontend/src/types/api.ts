@@ -109,7 +109,7 @@ export interface LeaderboardEntryResponse {
 }
 
 export interface InsightResponse {
-  category: 'team-ats' | 'team-ou' | 'team-streak' | 'player-leader'
+  category: 'team-ats' | 'team-ou' | 'market-trend'
   text: string
   sampleSize: number   // games behind this insight — always show alongside it
 }
@@ -126,7 +126,8 @@ export interface PropEstimate {
   line: number
   overOdds: number | null
   underOdds: number | null
-  bookmaker: string
+  bookmaker: string            // Over side's best-priced book
+  underBookmaker: string | null // Under side's best-priced book — can differ from bookmaker
   opponentAbbreviation: string
   statBasis: 'current' | 'prior'   // which season the history numbers are drawn from
   gamesWithData: number
@@ -138,6 +139,9 @@ export interface PropEstimate {
   estimatedHitRatePct: number | null
 }
 
+// "Questionable" | "Doubtful" | "Out" | "Injured Reserve" — null means not on the report.
+export type InjuryStatus = string | null
+
 export interface PlayerCardResponse {
   playerId: number
   name: string
@@ -145,6 +149,8 @@ export interface PlayerCardResponse {
   gamesPlayed: number
   seasonStats: Record<string, number>
   upcomingProps: PropEstimate[]
+  injuryStatus: InjuryStatus
+  injuryNote: string | null
 }
 
 // One player's prop line within the context of a specific game — the direct
@@ -155,11 +161,14 @@ export interface GamePropEntry {
   playerName: string
   teamAbbreviation: string | null
   estimate: PropEstimate
+  injuryStatus: InjuryStatus
+  injuryNote: string | null
 }
 
 export interface BetResponse {
   id: number
   kind: 'PlayerProp' | 'Spread' | 'Total'
+  isManual: boolean            // placed on another book, logged here by hand
   gameId: number
   gameLabel: string           // "SF @ LAR"
   gameDate: string            // "YYYY-MM-DD"
@@ -176,14 +185,45 @@ export interface BetResponse {
   outcome: 'Pending' | 'Won' | 'Lost' | 'Push'
   actualValue: number | null
   placedAt: string            // ISO 8601
+  closingLine: number | null
+  closingOdds: number | null
+  clvPct: number | null       // + = beat the closing line, - = line moved against you
 }
 
 export interface CreateBetRequest {
   gameId: number
   kind: 'PlayerProp' | 'Spread' | 'Total'
-  playerPropLineId?: number | null
   side: 'Over' | 'Under' | 'Home' | 'Away'
   stakeAmount: number
+  // Auto mode: reference a line this app actually synced.
+  playerPropLineId?: number | null
+  // Manual mode: the line/odds you actually got, placed on another book.
+  manualLine?: number | null
+  manualOdds?: number | null
+  playerId?: number | null      // PlayerProp manual mode
+  marketKey?: string | null     // PlayerProp manual mode — e.g. "player_receptions"
+  marketLabel?: string | null   // manual mode — overrides the derived label
+}
+
+// A game in the manual-bet picker's range (recent + upcoming) — not the full
+// TodayMatchupResponse shape, just enough to pick the right one.
+export interface GameListEntry {
+  gameId: number
+  gameDate: string
+  status: string
+  homeTeamId: number
+  homeTeamAbbr: string
+  homeTeamName: string
+  awayTeamId: number
+  awayTeamAbbr: string
+  awayTeamName: string
+}
+
+// One roster entry for the manual player-prop bet picker.
+export interface GamePlayerEntry {
+  playerId: number
+  name: string
+  teamAbbreviation: string | null
 }
 
 export interface HotBetEntry {
@@ -194,6 +234,8 @@ export interface HotBetEntry {
   gameLabel: string
   gameDate: string
   estimate: PropEstimate
+  injuryStatus: InjuryStatus
+  injuryNote: string | null
 }
 
 // Derived computations (pushes excluded from denominator per user decision)

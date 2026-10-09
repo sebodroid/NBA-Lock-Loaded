@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using NbaTracker.Data;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace NbaTracker.Data.Migrations
 {
     [DbContext(typeof(NbaTrackerDbContext))]
-    partial class NbaTrackerDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260914172631_AddPlayerInjuryStatus")]
+    partial class AddPlayerInjuryStatus
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -33,18 +36,12 @@ namespace NbaTracker.Data.Migrations
                     b.Property<int>("GameId")
                         .HasColumnType("integer");
 
-                    b.Property<bool>("IsManual")
-                        .HasColumnType("boolean");
-
                     b.Property<string>("Kind")
                         .IsRequired()
                         .HasColumnType("text");
 
                     b.Property<decimal>("LineAtBet")
                         .HasColumnType("numeric");
-
-                    b.Property<string>("MarketKey")
-                        .HasColumnType("text");
 
                     b.Property<string>("MarketLabel")
                         .IsRequired()
@@ -341,8 +338,6 @@ namespace NbaTracker.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Category");
-
                     b.HasIndex("GameId");
 
                     b.HasIndex("TeamId");
@@ -411,9 +406,6 @@ namespace NbaTracker.Data.Migrations
 
                     b.Property<int>("PlayerId")
                         .HasColumnType("integer");
-
-                    b.Property<string>("UnderBookmaker")
-                        .HasColumnType("text");
 
                     b.Property<int?>("UnderOdds")
                         .HasColumnType("integer");
