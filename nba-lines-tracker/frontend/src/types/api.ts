@@ -15,7 +15,7 @@ export interface TeamStatsResponse {
   ouPushes: number
   streak: number           // positive = W streak, negative = L streak, 0 = no games
   lastSyncedAt: string | null  // ISO 8601 UTC, from SyncRuns
-  logoUrl: string | null   // CFB only — other sports derive logos from the abbreviation
+  logoUrl: string | null
 }
 
 export interface HomeAwaySplit {
@@ -99,7 +99,7 @@ export interface TodayMatchupResponse {
   homeStats: TeamSeasonStats
   awayStats: TeamSeasonStats
   headToHead: H2HGameEntry[]
-  homeTeamLogoUrl: string | null   // CFB only
+  homeTeamLogoUrl: string | null
   awayTeamLogoUrl: string | null
 }
 
@@ -160,21 +160,20 @@ export interface GamePropEntry {
   estimate: PropEstimate
 }
 
-// Team-level markets — college football has these instead of player props.
 export interface TeamPropOutcome {
-  side: 'Over' | 'Under' | 'Team'   // "Team" = a spread/moneyline outcome for one team
-  teamId: number | null             // null for a game-level total
+  side: 'Over' | 'Under' | 'Team'
+  teamId: number | null
   teamAbbr: string | null
-  line: number | null               // signed for spreads; null for moneylines
-  price: number                     // American odds
+  line: number | null
+  price: number
 }
 
 export interface TeamPropMarket {
   marketKey: string
-  label: string                     // e.g. "Team Total"
-  group: string                     // "Full Game" | "1st Half" | "1st Quarter"
-  bookmaker: string                 // Odds API key, e.g. "fanduel"
-  updatedAt: string                 // ISO 8601 UTC
+  label: string
+  group: string
+  bookmaker: string
+  updatedAt: string
   outcomes: TeamPropOutcome[]
 }
 

@@ -4,27 +4,14 @@ using NbaTracker.Worker.Models.OddsApi;
 
 namespace NbaTracker.Worker.Services;
 
-/// <summary>
-/// Turns an Odds API event's team-prop markets into TeamPropLine rows. Pure — no DB or
-/// HTTP — so the mapping (which is where books' formats differ) is unit-testable.
-/// </summary>
 public static class CfbTeamProps
 {
-    /// <summary>
-    /// For each tracked market, uses the first bookmaker in priority order that posts it
-    /// (books cover different markets — team rushing yards is FanDuel-only, first-half
-    /// team totals DraftKings-only) and records which one, so the UI can name its source.
-    /// A market is dropped whole if any outcome can't be attributed to a team or is
-    /// missing its line: a half-populated Over/Under pair would mislead more than help.
-    /// </summary>
     public static List<TeamPropLine> BuildLines(
         Game game, OddsApiEvent propsEvent, bool swapped, IReadOnlyList<string> bookmakerPriority)
     {
         var lines = new List<TeamPropLine>();
         var now = DateTime.UtcNow;
 
-        // Same team-identity mapping as CfbSyncOrchestrator.BuildLine: the Odds API's
-        // "home" team is the game's away team when the two sources disagree (swapped).
         int? ResolveTeam(string? name)
         {
             if (name is null) return null;
@@ -60,14 +47,12 @@ public static class CfbTeamProps
 
                 if (overUnder)
                 {
-                    // Team totals name the team in Description; game-level totals leave it empty.
                     bool teamScoped = !string.IsNullOrEmpty(outcome.Description);
                     teamId = teamScoped ? ResolveTeam(outcome.Description) : null;
                     if (outcome.Point is null || (teamScoped && teamId is null)) { valid = false; break; }
                 }
                 else
                 {
-                    // Spread / moneyline outcomes are named for the team itself.
                     teamId = ResolveTeam(outcome.Name);
                     if (teamId is null) { valid = false; break; }
                 }

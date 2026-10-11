@@ -16,9 +16,6 @@ public static class GameEndpoints
         group.MapGet("/{id:int}/team-props", GetTeamPropsAsync);
     }
 
-    // GET /api/{sport}/games/{id}/team-props — the team-level markets (team totals,
-    // first-half and first-quarter lines, ...) stored for this game. Empty for sports
-    // that don't sync them. College football has team props instead of player props.
     private static async Task<IResult> GetTeamPropsAsync(
         string sport,
         int id,
@@ -36,7 +33,6 @@ public static class GameEndpoints
             .Where(l => l.GameId == id)
             .ToListAsync(ct);
 
-        // Home team's outcomes first, then away, then game-level; Over before Under.
         int TeamOrder(TeamPropLine l) =>
             l.TeamId == game.HomeTeamId ? 0 : l.TeamId == game.AwayTeamId ? 1 : 2;
         int SideOrder(string side) => side switch { "Over" => 0, "Under" => 1, _ => 2 };

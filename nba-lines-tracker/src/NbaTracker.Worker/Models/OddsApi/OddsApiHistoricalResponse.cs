@@ -8,6 +8,6 @@ namespace NbaTracker.Worker.Models.OddsApi;
 /// </summary>
 public class OddsApiHistoricalResponse
 {
-    [JsonPropertyName("timestamp")] public DateTimeOffset Timestamp { get; set; }
+    [JsonPropertyName("timestamp")] public DateTimeOffset? Timestamp { get; set; }
     [JsonPropertyName("data")] public List<OddsApiEvent> Data { get; set; } = [];
 }

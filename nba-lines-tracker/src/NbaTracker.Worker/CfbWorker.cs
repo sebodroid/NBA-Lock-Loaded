@@ -13,14 +13,8 @@ public class CfbWorker : BackgroundService
     private readonly SyncOptions _options;
     private readonly ILogger<CfbWorker> _logger;
 
-    // College games are mostly Saturdays but also land on Thursday/Friday nights, a
-    // Week 0 the weekend before the season "starts", and midweek MACtion. Like the NFL
-    // worker, every cron fire re-syncs a trailing window instead of guessing which
-    // weekdays had games — self-healing, and Saturday's late finishes get picked up.
     private const int RollingWindowDays = 7;
 
-    // Fires after NBA (5 AM), MLB (6 AM) and NFL (7 AM). Saturday night games are
-    // long final by 8 AM ET.
     private static readonly CronExpression DailySchedule =
         CronExpression.Parse("0 8 * * *", CronFormat.Standard);
 
@@ -83,11 +77,6 @@ public class CfbWorker : BackgroundService
         }
     }
 
-    /// <summary>
-    /// Re-syncs the last RollingWindowDays calendar days (through today), oldest first.
-    /// Upserts are idempotent and the orchestrator skips the paid Odds API calls for
-    /// dates that are already fully settled, so re-covering recent days daily is cheap.
-    /// </summary>
     private async Task RunRollingWindowAsync(CancellationToken ct)
     {
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
@@ -109,33 +98,54 @@ public class CfbWorker : BackgroundService
 
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
 
-        // Don't backfill before the season actually starts
-        var seasonStart = SportSeasonBoundaries.CfbRegularSeasonStart;
-
-        var lastSyncedDate = await db.SyncRuns
-            .Where(r => r.Sport == "CFB"
-                     && r.SyncDate != null
-                     && (r.Status == SyncRunStatus.Success || r.Status == SyncRunStatus.Partial))
-            .OrderByDescending(r => r.SyncDate)
-            .Select(r => r.SyncDate)
-            .FirstOrDefaultAsync(ct);
-
-        if (lastSyncedDate is null)
+        var seasonYear = today.Month <= 2 ? today.Year - 1 : today.Year;
+        if (!SportSeasonBoundaries.CfbRegularSeasonStarts.TryGetValue(seasonYear, out var seasonStart))
         {
-            _logger.LogInformation("[CFB] No previous sync found — skipping gap backfill");
+            _logger.LogInformation("[CFB] No season start on record for {Year} — skipping gap backfill", seasonYear);
             return;
         }
 
-        // Only need to cover the gap older than the rolling window — the window itself
-        // gets covered by RunRollingWindowAsync right after this.
         var windowStart = today.AddDays(-(RollingWindowDays - 1));
-        for (var d = lastSyncedDate.Value.AddDays(1); d < windowStart; d = d.AddDays(1))
+
+        var runs = await db.SyncRuns
+            .Where(r => r.Sport == "CFB"
+                     && r.SyncDate != null
+                     && (r.Status == SyncRunStatus.Success || r.Status == SyncRunStatus.Partial))
+            .Select(r => new { SyncDate = r.SyncDate!.Value, r.StartedAt })
+            .ToListAsync(ct);
+
+        var missing = FindDatesToBackfill(
+            runs.Select(r => (r.SyncDate, r.StartedAt)), seasonStart, windowStart);
+
+        if (missing.Count == 0) return;
+
+        _logger.LogInformation(
+            "[CFB] {Count} season dates have no completed sync ({First} to {Last}) — backfilling",
+            missing.Count, missing[0], missing[^1]);
+
+        foreach (var d in missing)
         {
-            if (d < seasonStart) continue;
-            _logger.LogInformation("[CFB] Gap detected: syncing {Date}", d);
             await RunSyncForDateAsync(d, ct);
             if (ct.IsCancellationRequested) return;
         }
+    }
+
+    public static List<DateOnly> FindDatesToBackfill(
+        IEnumerable<(DateOnly SyncDate, DateTime StartedAt)> completedRuns,
+        DateOnly seasonStart,
+        DateOnly windowStart)
+    {
+        var covered = completedRuns
+            .Where(r => DateOnly.FromDateTime(r.StartedAt) > r.SyncDate)
+            .Select(r => r.SyncDate)
+            .ToHashSet();
+
+        var missing = new List<DateOnly>();
+        for (var d = seasonStart; d < windowStart; d = d.AddDays(1))
+        {
+            if (!covered.Contains(d)) missing.Add(d);
+        }
+        return missing;
     }
 
     private async Task RunBackfillAsync(CancellationToken ct)
@@ -154,12 +164,6 @@ public class CfbWorker : BackgroundService
         _logger.LogInformation("[CFB] Backfill complete");
     }
 
-    /// <summary>
-    /// One-time backfill of a completed past season (e.g. CFB_HISTORICAL_SEASON=2025),
-    /// bounded by that season's own start/end dates from SportSeasonBoundaries. Expect
-    /// this to spend real Odds API credits: every date with games costs a historical
-    /// request per sport key (FBS and FCS), and a full season has roughly 60 such dates.
-    /// </summary>
     private async Task RunHistoricalSeasonBackfillAsync(int season, CancellationToken ct)
     {
         if (!SportSeasonBoundaries.CfbRegularSeasonStarts.TryGetValue(season, out var start))

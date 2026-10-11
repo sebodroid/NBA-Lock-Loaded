@@ -10,7 +10,5 @@ public class SyncOptions
     // and MlbWorker.cs don't read this, so NBA/MLB are unaffected by it.
     public int? NflHistoricalSeason { get; init; }
 
-    // Same idea for college football (CFB_HISTORICAL_SEASON=2025). CFB-only — no other
-    // worker reads it.
     public int? CfbHistoricalSeason { get; init; }
 }

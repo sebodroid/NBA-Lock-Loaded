@@ -20,11 +20,9 @@ public class NflStatsClient
     }
 
     /// <summary>
-    /// Fetches matches for a single date, following the data/pagination envelope
-    /// until totalCount is exhausted (a busy college Saturday is ~150 matches, so
-    /// pagination is exercised for real, not just on free-tier plans). Highlightly's
-    /// American football API serves both NFL and NCAA from the same endpoints, so this
-    /// client is shared — pass league="NCAA" for college football.
+    /// Fetches NFL matches for a single date, following the data/pagination envelope
+    /// until totalCount is exhausted (paid tiers shouldn't hit this, but free-tier
+    /// responses can be paginated per the "plan" block in the docs).
     /// </summary>
     public async Task<List<HighlightlyMatch>> GetGamesAsync(
         DateOnly date, CancellationToken ct, string league = "NFL")

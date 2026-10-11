@@ -26,11 +26,6 @@ public static class SportSeasonBoundaries
         [2025] = new DateOnly(2026, 2, 8),   // Super Bowl LX
     };
 
-    // College football (CFB). Season starts are the "Week 0" Saturday and ends are the CFP
-    // national championship — both confirmed against Highlightly's NCAA match data. Bowl
-    // and playoff games run into January but Highlightly tags them with the season's
-    // starting year, matching how the NFL is stored. There is no CFB preseason, so unlike
-    // the NFL these dates only bound backfills, not Odds API sport-key selection.
     public static readonly DateOnly CfbRegularSeasonStart = new(2026, 8, 29);
 
     public static readonly IReadOnlyDictionary<int, DateOnly> CfbRegularSeasonStarts = new Dictionary<int, DateOnly>
@@ -41,6 +36,6 @@ public static class SportSeasonBoundaries
 
     public static readonly IReadOnlyDictionary<int, DateOnly> CfbSeasonEnds = new Dictionary<int, DateOnly>
     {
-        [2025] = new DateOnly(2026, 1, 19),   // CFP national championship
+        [2025] = new DateOnly(2026, 1, 19),
     };
 }

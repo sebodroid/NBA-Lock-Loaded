@@ -111,6 +111,9 @@ public static class TeamEndpoints
             );
         }).ToList();
 
+        if (sport == "CFB")
+            stats = stats.Where(s => s.GamesPlayed > 0).ToList();
+
         return Results.Ok(stats);
     }
 

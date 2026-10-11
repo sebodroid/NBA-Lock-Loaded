@@ -8,7 +8,6 @@ import { useAppStore } from '@/store/useAppStore'
 import { useTeamProps } from '@/api/games'
 import type { TeamPropMarket, TeamPropOutcome } from '@/types/api'
 
-// Fixed tab order — must match the groups the API assigns in TeamPropMarkets.
 const GROUP_ORDER = ['Full Game', '1st Half', '1st Quarter']
 
 const BOOK_NAMES: Record<string, string> = {
@@ -27,7 +26,6 @@ function signed(v: number): string {
   return v > 0 ? `+${v}` : `${v}`
 }
 
-// One display row per team (or one for the game itself), in the order the API sent them.
 interface OutcomeRow {
   key: string
   label: string
@@ -45,8 +43,6 @@ function toRows(market: TeamPropMarket): OutcomeRow[] {
   return Array.from(rows.values())
 }
 
-// Over/Under chips show the side and number; a spread chip shows the signed line, and a
-// moneyline chip (no line) shows just the price.
 function chipText(o: TeamPropOutcome): string {
   const odds = americanOdds(o.price)
   if (o.side === 'Over') return `O ${o.line} ${odds}`
@@ -62,10 +58,8 @@ export function TeamPropsModal() {
   const { data: markets = [], isLoading, isError } = useTeamProps(game?.id ?? null)
   const [group, setGroup] = useState<string | null>(null)
 
-  // Reset the selected tab whenever a different game's props open.
   useEffect(() => { setGroup(null) }, [game?.id])
 
-  // Same defensive body-style cleanup as the other modals (Radix + StrictMode scroll-lock).
   useEffect(() => {
     if (open) return
     const t = setTimeout(() => {

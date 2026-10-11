@@ -4,17 +4,13 @@ using NbaTracker.Worker.Services;
 
 namespace NbaTracker.Worker.Tests;
 
-// The Odds API and Highlightly can disagree on which team is "home" — routine for
-// neutral-site and bowl games. These pin down that spread, favorite and per-side odds
-// follow the TEAM, not the home/away position.
 public class CfbLineMappingTests
 {
-    private const int HomeId = 10;   // the game's home team, per Highlightly
+    private const int HomeId = 10;
     private const int AwayId = 20;
 
     private static Game GameRow() => new() { Id = 1, HomeTeamId = HomeId, AwayTeamId = AwayId };
 
-    // Odds API event: "Alpha" is listed as its home team, "Beta" as its away team.
     private static OddsApiEvent Event() => new() { Id = "e1", HomeTeam = "Alpha", AwayTeam = "Beta" };
 
     private static OddsApiBookmaker Book(string favorite, decimal favPoint, int favPrice, int dogPrice)
@@ -71,8 +67,6 @@ public class CfbLineMappingTests
     [Fact]
     public void Swapped_FavoriteIsOddsHome_FavoriteIsGameAway()
     {
-        // Odds API's home (Alpha) is Highlightly's away team — so Alpha favored means
-        // the game's AWAY team is favored, and its odds belong on the away side.
         var line = CfbSyncOrchestrator.BuildLine(GameRow(), Event(), swapped: true, Book("Alpha", 7.5m, -115, -105));
 
         Assert.Equal(AwayId, line.FavoriteTeamId);

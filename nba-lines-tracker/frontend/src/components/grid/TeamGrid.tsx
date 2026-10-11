@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import {
   useReactTable,
@@ -48,7 +48,7 @@ const HISTORICAL_SEASONS: Record<Sport, string[]> = {
   nfl: ['2025'],
   nba: [],
   mlb: [],
-  cfb: [],
+  cfb: ['2025'],
 }
 
 export function TeamGrid() {
@@ -56,6 +56,7 @@ export function TeamGrid() {
   const conferenceOptions = sport ? CONFERENCE_OPTIONS[sport] : []
   const historicalSeasons = sport ? HISTORICAL_SEASONS[sport] : []
   const [season, setSeason] = useState<string | undefined>(undefined)   // undefined = live current season
+  useEffect(() => { setSeason(undefined) }, [sport])
   const { data: teams = [], isLoading, isError } = useTeams(season)
   const openPanel = useAppStore(s => s.openPanel)
 

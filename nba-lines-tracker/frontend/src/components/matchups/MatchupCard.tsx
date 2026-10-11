@@ -303,7 +303,6 @@ export function MatchupCard({ matchup }: MatchupCardProps) {
           </>
         )}
 
-        {/* Team props — college football's counterpart to player props */}
         {teamProps.length > 0 && (
           <>
             <Separator />

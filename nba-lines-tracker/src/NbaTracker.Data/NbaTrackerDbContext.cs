@@ -144,10 +144,6 @@ public class NbaTrackerDbContext : DbContext
             .HasIndex(l => new { l.GameId, l.PlayerId, l.MarketKey })
             .IsUnique();
 
-        // TeamPropLine — required FK to Game, optional FK to Team (game-level totals have
-        // none); Restrict for the same multi-cascade-path reason as everywhere else. Rows
-        // for a game are replaced wholesale on each refresh, so no uniqueness constraint —
-        // just an index for the per-game lookup the API and the refresh both do.
         modelBuilder.Entity<TeamPropLine>()
             .HasOne(l => l.Game)
             .WithMany()

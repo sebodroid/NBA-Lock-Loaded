@@ -7,34 +7,20 @@ using NbaTracker.Worker.Models.OddsApi;
 
 namespace NbaTracker.Worker.Services;
 
-/// <summary>
-/// College football sync. Follows NflSyncOrchestrator's shape, with differences forced
-/// by the data: Highlightly's NCAA feed covers every division (~150 games on a Saturday,
-/// ~755 teams) while only FBS/FCS games have betting lines, so a game is ingested only
-/// once it matches an Odds API event. Teams are seeded lazily from those matched games
-/// instead of bulk-loading the full team list. Box scores and player props are not
-/// captured — nothing consumes them for CFB, and college box scores are large.
-/// </summary>
 public class CfbSyncOrchestrator
 {
     private const string Sport = "CFB";
     private const string HighlightlyLeague = "NCAA";
 
-    // Confirmed against real results (Indiana 56-22 Oregon, Indiana 27-21 Miami — Indiana
-    // is Highlightly's homeTeam in both and its score is listed first).
     private const bool ScoreCurrentIsHomeFirst = true;
 
-    // FBS and FCS are separate Odds API sport keys; FBS-vs-FCS games can appear under either.
     private static readonly string[] OddsSportKeys =
         ["americanfootball_ncaaf", "americanfootball_ncaaf_fcs"];
 
-    // Checked after the configured primary/fallback pair. College games get lines from a
-    // patchier set of books than the NFL, and asking for more costs no extra API credits.
+    private const string LineMarkets = "spreads,totals";
+
     private static readonly string[] ExtraBookmakers = ["draftkings", "betmgm", "williamhill_us"];
 
-    // Team props cost real Odds API credits (one per market returned, per game), and the
-    // worker re-syncs today on every restart — so a game's props are not re-fetched
-    // within this window. Lines drift, but not enough hour-to-hour to be worth ~8 credits.
     private static readonly TimeSpan TeamPropsFreshFor = TimeSpan.FromHours(3);
 
     private static readonly TimeZoneInfo EasternTime = GameMatchingService.GetEasternTimeZone();
@@ -71,9 +57,6 @@ public class CfbSyncOrchestrator
     {
         _logger.LogInformation("[CFB] Starting daily sync for {Date}", date);
 
-        // Read before this run's own SyncRun row is added. A run that started on or after
-        // UTC midnight following the game date is one that took the historical-odds path
-        // (see FetchOddsEventsAsync), which is the definitive line snapshot for the day.
         var afterDay = DateTime.SpecifyKind(date.AddDays(1).ToDateTime(TimeOnly.MinValue), DateTimeKind.Utc);
         var historicalPassDone = await _db.SyncRuns.AnyAsync(
             r => r.Sport == Sport && r.SyncDate == date
@@ -107,9 +90,6 @@ public class CfbSyncOrchestrator
                 .ToListAsync(ct);
             var gamesByMatchId = games.ToDictionary(g => g.NbaGameId);
 
-            // Refresh status/score for games we already track, and settle any that just
-            // went final from their stored line. Neither needs the Odds API, so a game
-            // that finishes after its date's odds were last fetched still gets its result.
             foreach (var match in matches)
             {
                 if (!gamesByMatchId.TryGetValue(match.Id.ToString(), out var tracked)) continue;
@@ -119,12 +99,6 @@ public class CfbSyncOrchestrator
             }
             await _db.SaveChangesAsync(ct);
 
-            // Odds are the expensive call (two sport keys, and a historical request costs
-            // extra credits), so a past date is fetched until ONE post-day pass has
-            // succeeded and never again — rather than until every game is "settled",
-            // which some games never reach (e.g. no posted total). That single pass is
-            // also the only chance to discover games: most of a day's matches are
-            // non-betting divisions that are never ingested, so the DB can't say what's new.
             var today = DateOnly.FromDateTime(DateTime.UtcNow);
             bool needsOddsFetch = matches.Count > 0 && (date >= today || !historicalPassDone);
 
@@ -161,8 +135,6 @@ public class CfbSyncOrchestrator
 
                         if (candidates.Count == 0)
                         {
-                            // The expected outcome for non-FBS/FCS games; for a tracked game
-                            // it just means no line update this pass.
                             if (game is null) withoutOdds++;
                             continue;
                         }
@@ -200,7 +172,6 @@ public class CfbSyncOrchestrator
                         withLines++;
                         _logger.LogDebug("[CFB] Lines saved for game {GameId}", game.Id);
 
-                        // Team props only matter before kickoff, and only for today's slate.
                         if (date == today && game.Status == "SCHEDULED")
                             propTargets.Add((game, oddsEvent.SportKey, swapped));
                     }
@@ -228,8 +199,6 @@ public class CfbSyncOrchestrator
                     }
                 }
 
-                // A betting event with no Highlightly match usually means a name the
-                // matcher doesn't know yet — surface it so an alias can be added.
                 var unmatched = oddsEvents
                     .Where(e => !matchedEventIds.Contains(e.Id)
                              && CfbGameMatchingService.EasternDate(e.CommenceTime, EasternTime) == date)
@@ -271,15 +240,6 @@ public class CfbSyncOrchestrator
         }
     }
 
-    // -------------------------------------------------------------------------
-    // Odds
-    // -------------------------------------------------------------------------
-
-    /// <summary>
-    /// Pulls FBS and FCS events. One key failing (e.g. FCS quiet in a given week) must
-    /// not discard the other, so failures are recorded as errors — which marks the run
-    /// Partial and makes the date get retried — rather than aborting the sync.
-    /// </summary>
     private async Task<List<OddsApiEvent>> FetchOddsEventsAsync(
         DateOnly date, DateOnly today, List<string> errors, CancellationToken ct)
     {
@@ -290,8 +250,8 @@ public class CfbSyncOrchestrator
             try
             {
                 var fetched = date < today
-                    ? await _oddsClient.GetHistoricalOddsAsync(date, ct, sportKey, _bookmakerPriority)
-                    : await _oddsClient.GetOddsAsync(ct, sportKey, _bookmakerPriority);
+                    ? await _oddsClient.GetHistoricalOddsAsync(date, ct, sportKey, _bookmakerPriority, LineMarkets)
+                    : await _oddsClient.GetOddsAsync(ct, sportKey, _bookmakerPriority, LineMarkets);
 
                 foreach (var evt in fetched) events.TryAdd(evt.Id, evt);
             }
@@ -305,8 +265,6 @@ public class CfbSyncOrchestrator
         return events.Values.ToList();
     }
 
-    // First preferred bookmaker that actually posted a spread or total for this event —
-    // an event can list a book that only offers a moneyline, which is no use here.
     private OddsApiBookmaker? PickBookmaker(OddsApiEvent evt)
     {
         foreach (var key in _bookmakerPriority)
@@ -318,12 +276,6 @@ public class CfbSyncOrchestrator
         return null;
     }
 
-    /// <summary>
-    /// Fetches and stores a game's team props (a separate per-event Odds API call, like
-    /// the NFL's player props). Returns silently when nothing is posted — normal for FCS
-    /// and lower-profile games — and keeps whatever was stored before, so a book pulling
-    /// its props near kickoff doesn't blank a page that had them earlier.
-    /// </summary>
     private async Task SyncTeamPropsAsync(Game game, string sportKey, bool swapped, CancellationToken ct)
     {
         if (game.OddsApiGameId is null) return;
@@ -393,13 +345,6 @@ public class CfbSyncOrchestrator
         }
     }
 
-    /// <summary>
-    /// Builds the game's line from an Odds API bookmaker. Spread and odds are mapped to
-    /// the game's home/away by TEAM identity: for neutral-site and bowl games the Odds
-    /// API's "home" team is frequently Highlightly's "away" team (swapped = true), and
-    /// reading them positionally, as the NFL flow does, would flip the favorite and
-    /// both sides' odds.
-    /// </summary>
     public static GameLine BuildLine(
         Game game, OddsApiEvent oddsEvent, bool swapped, OddsApiBookmaker bookmaker)
     {
@@ -482,18 +427,12 @@ public class CfbSyncOrchestrator
               || game.GameResult.AwayAtsResult != awayAts
               || game.GameResult.OuResult != ouResult)
         {
-            // Called for every tracked game on every sync, so only touch the row when the
-            // outcome actually changed (a corrected score or line) — not to bump ResolvedAt.
             game.GameResult.HomeAtsResult = homeAts;
             game.GameResult.AwayAtsResult = awayAts;
             game.GameResult.OuResult      = ouResult;
             game.GameResult.ResolvedAt    = DateTime.UtcNow;
         }
     }
-
-    // -------------------------------------------------------------------------
-    // Games and teams
-    // -------------------------------------------------------------------------
 
     private async Task<Game> CreateGameAsync(HighlightlyMatch match, DateOnly date, CancellationToken ct)
     {
@@ -513,18 +452,10 @@ public class CfbSyncOrchestrator
         ApplyMatchState(game, match, date, homeTeam.Name, awayTeam.Name);
         _db.Games.Add(game);
 
-        // Saved now so game.Id exists before the GameLine/GameResult that reference it.
         await _db.SaveChangesAsync(ct);
         return game;
     }
 
-    /// <summary>
-    /// Teams are created the first time a game with betting lines involves them, straight
-    /// from the match payload — there's no bulk team seed (Highlightly's NCAA list is ~755
-    /// teams, mostly ones that never get lines). This also means every stored CFB team
-    /// has a betting-covered game, and abbreviations among them are unique even though
-    /// they aren't across Highlightly's full list.
-    /// </summary>
     private async Task<Team> GetOrCreateTeamAsync(HighlightlyTeamRef teamRef, CancellationToken ct)
     {
         var externalId = teamRef.Id.ToString();
@@ -536,13 +467,13 @@ public class CfbSyncOrchestrator
             team = new Team
             {
                 Sport        = Sport,
-                NbaApiId     = externalId,   // reusing field as generic external ID
+                NbaApiId     = externalId,
                 Name         = teamRef.DisplayName,
                 Abbreviation = teamRef.Abbreviation,
                 UpdatedAt    = DateTime.UtcNow
             };
             _db.Teams.Add(team);
-            await _db.SaveChangesAsync(ct);   // populate team.Id before a game references it
+            await _db.SaveChangesAsync(ct);
             _logger.LogInformation("[CFB] Added team {Name} ({Abbr})", team.Name, team.Abbreviation);
         }
         else if (team.Name != teamRef.DisplayName || team.Abbreviation != teamRef.Abbreviation)
@@ -563,22 +494,19 @@ public class CfbSyncOrchestrator
             "Scheduled"   => "SCHEDULED",
             "In progress" => "LIVE",
             "Finished"    => "FINAL",
-            _             => "POSTPONED"   // Postponed, Suspended, Cancelled, Abandoned, Unknown
+            _             => "POSTPONED"
         };
 
         var (homeScore, awayScore) = ParseScore(
             match.State.Score?.Current, match.Id, homeTeamName, awayTeamName);
         bool overtime = !string.IsNullOrEmpty(match.State.Score?.FirstOvertimePeriod);
 
-        // Runs for every tracked game on every sync — only stamp UpdatedAt when
-        // something actually changed, so an idle re-sync doesn't rewrite ~100 rows.
         bool changed = game.Status != status
             || game.HomeScore != homeScore
             || game.AwayScore != awayScore
             || (overtime && game.WentToOvertime != true)
             || game.GameDate != date;
 
-        // A game rescheduled to another day since it was first stored gets its date corrected.
         if (game.GameDate != date)
         {
             _logger.LogInformation("[CFB] Correcting GameDate for match {MatchId}: {Old} -> {New}",
@@ -594,7 +522,6 @@ public class CfbSyncOrchestrator
         if (changed) game.UpdatedAt = DateTime.UtcNow;
     }
 
-    /// <summary>Parses Highlightly's combined "H - A" score string.</summary>
     private (int? Home, int? Away) ParseScore(
         string? current, long matchId, string? homeTeamName, string? awayTeamName)
     {

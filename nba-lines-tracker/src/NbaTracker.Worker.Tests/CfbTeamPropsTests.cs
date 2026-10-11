@@ -7,9 +7,6 @@ namespace NbaTracker.Worker.Tests;
 
 public class CfbTeamPropsTests
 {
-    // Trimmed from a real Odds API event-odds response (Florida @ Auburn, Sept 19 2026).
-    // Books cover different markets: only FanDuel has team rushing yards, only DraftKings
-    // has first-half team totals — which is why the mapper picks a book per market.
     private const string Payload = """
     {
       "id": "7ef3b27d15de635a3e05324f2b0c56cb",
@@ -53,7 +50,6 @@ public class CfbTeamPropsTests
 
     private static OddsApiEvent Event() => JsonSerializer.Deserialize<OddsApiEvent>(Payload)!;
 
-    // Auburn is the game's home team, matching the Odds API's own home team.
     private static Game AuburnHome() => new() { Id = 1, HomeTeamId = 10, AwayTeamId = 20 };
 
     private static List<TeamPropLine> ForMarket(List<TeamPropLine> lines, string key) =>
@@ -64,11 +60,8 @@ public class CfbTeamPropsTests
     {
         var lines = CfbTeamProps.BuildLines(AuburnHome(), Event(), swapped: false, Priority);
 
-        // FanDuel and DraftKings both post h2h_h1 — priority order picks FanDuel.
         Assert.All(ForMarket(lines, "h2h_h1"), l => Assert.Equal("fanduel", l.Bookmaker));
-        // Only DraftKings has first-half team totals.
         Assert.All(ForMarket(lines, "team_totals_h1"), l => Assert.Equal("draftkings", l.Bookmaker));
-        // Only FanDuel has team rushing yards.
         Assert.All(ForMarket(lines, "team_total_rush_yds"), l => Assert.Equal("fanduel", l.Bookmaker));
     }
 
@@ -114,14 +107,12 @@ public class CfbTeamPropsTests
     [Fact]
     public void Swapped_MapsOddsApiTeamsToTheOppositeGameSide()
     {
-        // Highlightly has Florida at home (id 10) and Auburn away (id 20) — the reverse
-        // of the Odds API — so "Auburn Tigers" must resolve to the game's away team.
         var game = new Game { Id = 1, HomeTeamId = 10, AwayTeamId = 20 };
 
         var lines = ForMarket(CfbTeamProps.BuildLines(game, Event(), swapped: true, Priority), "team_totals");
 
-        Assert.Equal(26.5m, Assert.Single(lines, l => l.TeamId == 20 && l.Side == "Over").Line);   // Auburn
-        Assert.Equal(27.5m, Assert.Single(lines, l => l.TeamId == 10 && l.Side == "Over").Line);   // Florida
+        Assert.Equal(26.5m, Assert.Single(lines, l => l.TeamId == 20 && l.Side == "Over").Line);
+        Assert.Equal(27.5m, Assert.Single(lines, l => l.TeamId == 10 && l.Side == "Over").Line);
     }
 
     [Fact]
@@ -152,7 +143,6 @@ public class CfbTeamPropsTests
     {
         var lines = CfbTeamProps.BuildLines(AuburnHome(), Event(), swapped: false, Priority);
 
-        // The payload has no quarter markets at all.
         Assert.Empty(ForMarket(lines, "spreads_q1"));
         Assert.Empty(ForMarket(lines, "totals_q1"));
     }

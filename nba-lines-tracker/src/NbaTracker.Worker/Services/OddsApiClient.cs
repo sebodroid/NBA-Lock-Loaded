@@ -22,9 +22,8 @@ public class OddsApiClient
         _fallbackBookmaker = config["OddsApi:FallbackBookmaker"] ?? "hardrockbet";
     }
 
-    // Defaults to the configured primary/fallback pair. Callers with spottier bookmaker
-    // coverage (college football) pass a wider list — the Odds API bills by markets
-    // returned, not bookmakers requested, so a wider list costs nothing extra.
+    public const string DefaultMarkets = "spreads,totals,h2h";
+
     private string BookmakersParam(IEnumerable<string>? bookmakers)
         => bookmakers is null
             ? $"{_primaryBookmaker},{_fallbackBookmaker}"
@@ -36,9 +35,10 @@ public class OddsApiClient
     /// the HardRock key (OddsApi:FallbackBookmaker) can be validated.
     /// </summary>
    public async Task<List<OddsApiEvent>> GetOddsAsync(
-       CancellationToken ct, string sportKey = "basketball_nba", IEnumerable<string>? bookmakers = null)
+       CancellationToken ct, string sportKey = "basketball_nba", IEnumerable<string>? bookmakers = null,
+       string markets = DefaultMarkets)
 {
-    var path = $"v4/sports/{sportKey}/odds?regions=us&markets=spreads,totals,h2h" +
+    var path = $"v4/sports/{sportKey}/odds?regions=us&markets={markets}" +
                $"&bookmakers={BookmakersParam(bookmakers)}" +
                $"&oddsFormat=american" +
                $"&apiKey={_apiKey}";
@@ -69,12 +69,13 @@ public class OddsApiClient
     /// Requires a paid Odds API plan (Starter or above).
     /// </summary>
    public async Task<List<OddsApiEvent>> GetHistoricalOddsAsync(
-       DateOnly date, CancellationToken ct, string sportKey = "basketball_nba", IEnumerable<string>? bookmakers = null)
+       DateOnly date, CancellationToken ct, string sportKey = "basketball_nba", IEnumerable<string>? bookmakers = null,
+       string markets = DefaultMarkets)
 {
     var snapshotTime = new DateTime(date.Year, date.Month, date.Day, 17, 0, 0, DateTimeKind.Utc);
     var iso = snapshotTime.ToString("yyyy-MM-ddTHH:mm:ssZ");
 
-    var path = $"v4/historical/sports/{sportKey}/odds?regions=us&markets=spreads,totals,h2h" +
+    var path = $"v4/historical/sports/{sportKey}/odds?regions=us&markets={markets}" +
                $"&bookmakers={BookmakersParam(bookmakers)}" +
                $"&oddsFormat=american" +
                $"&date={iso}" +

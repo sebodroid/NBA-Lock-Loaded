@@ -28,7 +28,6 @@ var nflHistoricalSeasonStr = builder.Configuration["NFL_HISTORICAL_SEASON"];
 if (!string.IsNullOrEmpty(nflHistoricalSeasonStr) && int.TryParse(nflHistoricalSeasonStr, out var parsedSeason))
     nflHistoricalSeason = parsedSeason;
 
-// One-time CFB historical-season backfill: CFB_HISTORICAL_SEASON=2025 env var
 int? cfbHistoricalSeason = null;
 var cfbHistoricalSeasonStr = builder.Configuration["CFB_HISTORICAL_SEASON"];
 if (!string.IsNullOrEmpty(cfbHistoricalSeasonStr) && int.TryParse(cfbHistoricalSeasonStr, out var parsedCfbSeason))
@@ -54,7 +53,6 @@ builder.Services.AddScoped<MlbSyncOrchestrator>();
 // NFL orchestrator
 builder.Services.AddScoped<NflSyncOrchestrator>();
 
-// CFB orchestrator
 builder.Services.AddScoped<CfbSyncOrchestrator>();
 
 // DbContext
@@ -99,7 +97,7 @@ builder.Services.AddHttpClient<MlbStatsClient>(client =>
     pipeline.AddTimeout(TimeSpan.FromSeconds(30));
 });
 
-// Highlightly — NFL and NCAA football schedule + scores (one client; league is a parameter)
+// Highlightly — NFL schedule + scores
 builder.Services.AddHttpClient<NflStatsClient>(client =>
 {
     client.BaseAddress = new Uri("https://american-football.highlightly.net/");
@@ -117,7 +115,7 @@ builder.Services.AddHttpClient<NflStatsClient>(client =>
     pipeline.AddTimeout(TimeSpan.FromSeconds(30));
 });
 
-// The Odds API — shared by NBA, MLB, NFL and CFB, sport key passed per call
+// The Odds API — shared by NBA and MLB, sport key passed per call
 builder.Services.AddHttpClient<OddsApiClient>(client =>
 {
     client.BaseAddress = new Uri("https://api.the-odds-api.com/");

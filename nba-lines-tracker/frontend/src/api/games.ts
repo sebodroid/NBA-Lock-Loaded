@@ -24,8 +24,6 @@ export function useGameProps(gameId: number | null) {
   })
 }
 
-// Team-level markets for a game. Only college football syncs these, so callers pass
-// enabled=false elsewhere rather than firing a request per card that can only return [].
 export function useTeamProps(gameId: number | null, enabled = true) {
   const { sport = 'nba' } = useParams<{ sport: string }>()
   return useQuery({
