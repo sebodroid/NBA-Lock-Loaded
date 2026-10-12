@@ -7,7 +7,7 @@ let accessToken: string | null = null
 // Dev: Vite's proxy handles /api/* on the same origin, so this stays empty.
 // Prod: frontend (Cloudflare Pages) and API (own server) are different origins —
 // VITE_API_URL is baked in at build time (Cloudflare Pages dashboard env var).
-const apiBaseUrl = import.meta.env.VITE_API_URL ?? ''
+export const apiBaseUrl = import.meta.env.VITE_API_URL ?? ''
 
 export const apiClient = axios.create({
   baseURL: apiBaseUrl,
