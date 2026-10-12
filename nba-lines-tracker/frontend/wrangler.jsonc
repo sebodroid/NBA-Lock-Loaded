@@ -1,8 +1,10 @@
 {
   "name": "nba-lock-loaded",
   "compatibility_date": "2026-01-01",
+  "main": "worker/entry.js",
   "assets": {
     "directory": "./dist",
+    "binding": "ASSETS",
     "not_found_handling": "single-page-application"
   }
 }
