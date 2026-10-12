@@ -5,7 +5,11 @@
 // Cloudflare's edge, isn't a browser request at all — mixed-content rules don't
 // apply to server-side fetches. Everything else falls through to the static
 // assets binding (the built React app).
-const API_ORIGIN = 'http://138.197.142.126'
+// nip.io is a free wildcard DNS service: <anything>.<ip>.nip.io resolves straight
+// to <ip>, no signup, no cost. Needed because Workers' fetch() rejects a bare IP
+// literal as the target (Cloudflare error 1003) — this gives it a real hostname
+// that still lands on the exact same server.
+const API_ORIGIN = 'http://138.197.142.126.nip.io'
 
 export default {
   async fetch(request, env) {
