@@ -80,6 +80,14 @@ public class NbaTrackerDbContext : DbContext
             .HasIndex(u => u.Email)
             .IsUnique();
 
+        // Default true so this migration backfills every EXISTING row (the seeded admin,
+        // any admin-created account) as already-approved — application code sets it
+        // explicitly false for new self-registrations rather than relying on this default,
+        // which exists purely for the migration's backfill.
+        modelBuilder.Entity<User>()
+            .Property(u => u.IsApproved)
+            .HasDefaultValue(true);
+
         // Player — optional FK to Team (last known team)
         modelBuilder.Entity<Player>()
             .HasOne(p => p.Team)
@@ -159,12 +167,19 @@ public class NbaTrackerDbContext : DbContext
             .Property(b => b.Side)
             .HasConversion<string>();
 
-        // Bet — required FK to Game, optional FKs to PlayerPropLine/Player (PlayerProp
-        // bets only); Restrict for the same multi-cascade-path reason as everywhere else
+        // Bet — required FK to Game and User, optional FKs to PlayerPropLine/Player
+        // (PlayerProp bets only); Restrict for the same multi-cascade-path reason as
+        // everywhere else
         modelBuilder.Entity<Bet>()
             .HasOne(b => b.Game)
             .WithMany()
             .HasForeignKey(b => b.GameId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<Bet>()
+            .HasOne(b => b.User)
+            .WithMany()
+            .HasForeignKey(b => b.UserId)
             .OnDelete(DeleteBehavior.Restrict);
 
         modelBuilder.Entity<Bet>()
@@ -183,6 +198,11 @@ public class NbaTrackerDbContext : DbContext
 
         modelBuilder.Entity<Bet>()
             .HasIndex(b => new { b.Sport, b.PlacedAt });
+
+        // Every bet query is now scoped to "this user's bets for this sport" — a
+        // composite index matching that exact filter shape.
+        modelBuilder.Entity<Bet>()
+            .HasIndex(b => new { b.UserId, b.Sport });
 
         // PlayerInjuryStatus — one row per injured player, replaced wholesale each sync
         modelBuilder.Entity<PlayerInjuryStatus>()

@@ -10,9 +10,50 @@ public static class AdminEndpoints
     public static void Map(RouteGroupBuilder group)
     {
         group.MapPost("/users", CreateUserAsync);
+        group.MapGet("/users/pending", GetPendingUsersAsync);
+        group.MapPost("/users/{id:int}/approve", ApproveUserAsync);
+        group.MapDelete("/users/{id:int}", RejectUserAsync);
         group.MapGet("/sync-status", GetSyncStatusAsync);
         group.MapGet("/debug/stat-names", GetStatNamesAsync);
         group.MapGet("/debug/games", GetDebugGamesAsync);
+    }
+
+    // GET /api/admin/users/pending — accounts that self-registered but haven't been let
+    // in yet.
+    private static async Task<IResult> GetPendingUsersAsync(NbaTrackerDbContext db, CancellationToken ct)
+    {
+        var pending = await db.Users
+            .Where(u => !u.IsApproved)
+            .OrderBy(u => u.CreatedAt)
+            .Select(u => new PendingUserResponse(u.Id, u.Email, u.Username, u.CreatedAt))
+            .ToListAsync(ct);
+
+        return Results.Ok(pending);
+    }
+
+    private static async Task<IResult> ApproveUserAsync(int id, NbaTrackerDbContext db, CancellationToken ct)
+    {
+        var user = await db.Users.FindAsync([id], ct);
+        if (user is null) return Results.NotFound();
+
+        user.IsApproved = true;
+        await db.SaveChangesAsync(ct);
+        return Results.Ok();
+    }
+
+    // DELETE /api/admin/users/{id} — rejects a pending signup by removing it outright.
+    // Intentionally scoped to pending accounts only: an admin shouldn't be able to
+    // one-click-delete an already-approved user from this same button, since that's a
+    // more consequential action than declining a signup request.
+    private static async Task<IResult> RejectUserAsync(int id, NbaTrackerDbContext db, CancellationToken ct)
+    {
+        var user = await db.Users.FindAsync([id], ct);
+        if (user is null) return Results.NotFound();
+        if (user.IsApproved) return Results.BadRequest(new { error = "Cannot reject an already-approved user." });
+
+        db.Users.Remove(user);
+        await db.SaveChangesAsync(ct);
+        return Results.Ok();
     }
 
     // GET /api/admin/debug/games?date=2026-09-14&sport=NFL — recent games with their
@@ -86,6 +127,7 @@ public static class AdminEndpoints
             Username = req.Email,   // default display name to email until Phase 4 adds a username field
             PasswordHash = BCrypt.Net.BCrypt.HashPassword(req.Password),
             IsAdmin = req.IsAdmin,
+            IsApproved = true,   // admin-created directly — no approval step needed
             CreatedAt = DateTime.UtcNow
         });
 

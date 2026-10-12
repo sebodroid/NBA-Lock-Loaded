@@ -1,3 +1,10 @@
+export interface PendingUser {
+  id: number
+  email: string
+  username: string
+  createdAt: string
+}
+
 export interface TeamStatsResponse {
   teamId: number
   name: string

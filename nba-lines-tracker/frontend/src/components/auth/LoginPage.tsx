@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
+import axios from 'axios'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -10,6 +11,7 @@ import { useAppStore } from '@/store/useAppStore'
 export function LoginPage() {
   const navigate = useNavigate()
   const setAuthenticated = useAppStore(s => s.setAuthenticated)
+  const setIsAdmin = useAppStore(s => s.setIsAdmin)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -20,11 +22,19 @@ export function LoginPage() {
     setError(null)
     setIsLoading(true)
     try {
-      await login(email, password)
+      const { isAdmin } = await login(email, password)
+      setIsAdmin(isAdmin)
       setAuthenticated(true)
       navigate('/', { replace: true })
-    } catch {
-      setError('Invalid email or password.')
+    } catch (err) {
+      // Distinct from a wrong password — the account exists and the password is
+      // correct, it just hasn't been let in yet.
+      if (axios.isAxiosError(err) && err.response?.status === 403
+        && err.response.data?.error === 'pending_approval') {
+        setError('Your account is waiting for approval. Check back once an admin has approved it.')
+      } else {
+        setError('Invalid email or password.')
+      }
     } finally {
       setIsLoading(false)
     }
@@ -68,9 +78,18 @@ export function LoginPage() {
             />
           </div>
           <Button type="submit" className="w-full" disabled={isLoading}>
-            {isLoading ? 'Signing in\u2026' : 'Sign in'}
+            {isLoading ? 'Signing in…' : 'Sign in'}
           </Button>
         </form>
+        <p className="text-sm text-center text-muted-foreground">
+          Don't have an account?{' '}
+          <Link to="/register" className="font-medium text-primary hover:underline">
+            Create one
+          </Link>
+        </p>
+        <p className="text-[11px] text-muted-foreground text-center leading-relaxed">
+          For entertainment and informational purposes only — not betting or financial advice.
+        </p>
       </div>
     </div>
   )

@@ -90,6 +90,7 @@ if (app.Environment.IsDevelopment())
                 Username = adminEmail,
                 PasswordHash = BCrypt.Net.BCrypt.HashPassword(adminPassword),
                 IsAdmin = true,
+                IsApproved = true,
                 CreatedAt = DateTime.UtcNow
             });
             await db.SaveChangesAsync();
@@ -141,5 +142,8 @@ HotBetsEndpoints.Map(api.MapGroup("/{sport}/hot-bets").RequireAuthorization());
 
 // Parlay suggestion endpoints — sport-scoped, any authenticated user
 ParlayEndpoints.Map(api.MapGroup("/{sport}/parlays").RequireAuthorization());
+
+// Custom line confidence checker — sport-scoped, any authenticated user
+CustomLineEndpoints.Map(api.MapGroup("/{sport}/custom-line").RequireAuthorization());
 
 app.Run();

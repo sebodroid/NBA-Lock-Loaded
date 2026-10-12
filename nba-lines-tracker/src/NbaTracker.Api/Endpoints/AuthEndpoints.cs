@@ -11,6 +11,7 @@ public static class AuthEndpoints
     public static void Map(RouteGroupBuilder group)
     {
         group.MapPost("/login", LoginAsync);
+        group.MapPost("/register", RegisterAsync);
         group.MapPost("/refresh", RefreshAsync);
         group.MapPost("/logout", LogoutAsync).RequireAuthorization();
     }
@@ -29,6 +30,12 @@ public static class AuthEndpoints
         if (user is null || !BCrypt.Net.BCrypt.Verify(req.Password, hashToCheck))
             return Results.Unauthorized();
 
+        // Correct credentials, but an admin hasn't let this account in yet — distinct from
+        // "wrong password" so the frontend can show an honest message instead of implying
+        // a typo.
+        if (!user.IsApproved)
+            return Results.Json(new { error = "pending_approval" }, statusCode: StatusCodes.Status403Forbidden);
+
         var accessToken = tokens.GenerateAccessToken(user);
         var refreshPlaintext = tokens.GenerateRefreshToken();
 
@@ -43,7 +50,40 @@ public static class AuthEndpoints
         user.LastLoginAt = DateTime.UtcNow;
         await db.SaveChangesAsync(ct);
 
-        return Results.Ok(new LoginResponse(accessToken, refreshPlaintext, 900));
+        return Results.Ok(new LoginResponse(accessToken, refreshPlaintext, 900, user.IsAdmin));
+    }
+
+    // POST /api/auth/register — creates the account but does NOT log them in: IsApproved
+    // starts false, and LoginAsync rejects any unapproved account regardless of a correct
+    // password. An admin has to explicitly approve via AdminEndpoints first.
+    private static async Task<IResult> RegisterAsync(
+        RegisterRequest req,
+        NbaTrackerDbContext db,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(req.Email) || string.IsNullOrWhiteSpace(req.Username)
+            || string.IsNullOrWhiteSpace(req.Password))
+            return Results.BadRequest(new { error = "Email, username, and password are required." });
+
+        if (req.Password.Length < 8)
+            return Results.BadRequest(new { error = "Password must be at least 8 characters." });
+
+        var exists = await db.Users.AnyAsync(u => u.Email == req.Email, ct);
+        if (exists)
+            return Results.Conflict(new { error = "An account with that email already exists." });
+
+        db.Users.Add(new User
+        {
+            Email = req.Email,
+            Username = req.Username,
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword(req.Password),
+            IsAdmin = false,
+            IsApproved = false,
+            CreatedAt = DateTime.UtcNow
+        });
+
+        await db.SaveChangesAsync(ct);
+        return Results.Ok(new { message = "Account created — waiting for approval." });
     }
 
     private static async Task<IResult> RefreshAsync(
@@ -82,7 +122,7 @@ public static class AuthEndpoints
 
         await db.SaveChangesAsync(ct);
 
-        return Results.Ok(new LoginResponse(newAccessToken, newRefreshPlaintext, 900));
+        return Results.Ok(new LoginResponse(newAccessToken, newRefreshPlaintext, 900, match.User.IsAdmin));
     }
 
     private static async Task<IResult> LogoutAsync(

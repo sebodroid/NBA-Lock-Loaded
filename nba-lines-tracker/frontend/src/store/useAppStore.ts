@@ -9,6 +9,8 @@ interface AppStore {
   setPalette: (key: PaletteKey) => void
   isAuthenticated: boolean
   setAuthenticated: (value: boolean) => void
+  isAdmin: boolean
+  setIsAdmin: (value: boolean) => void
   openPanels: number[]
   openPanel: (teamId: number) => void
   closePanel: (teamId: number) => void
@@ -48,6 +50,8 @@ export const useAppStore = create<AppStore>()(
       },
       isAuthenticated: false,
       setAuthenticated: (value) => set({ isAuthenticated: value }),
+      isAdmin: false,
+      setIsAdmin: (value) => set({ isAdmin: value }),
       openPanels: [],
       openPanel: (teamId) => set(state => {
         if (state.openPanels.includes(teamId)) {

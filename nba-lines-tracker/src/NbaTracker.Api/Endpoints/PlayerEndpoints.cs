@@ -27,6 +27,31 @@ public static class PlayerEndpoints
     public static void MapPlayerCard(RouteGroupBuilder group)
     {
         group.MapGet("/{id:int}", GetPlayerCardAsync);
+        group.MapGet("/search", SearchPlayersAsync);
+    }
+
+    // GET /api/{sport}/players/search?q=mahomes — partial, case-insensitive name match for
+    // the custom-line checker's player picker. Registered before "/{id:int}" would ever
+    // conflict since "search" never matches the int constraint.
+    private static async Task<IResult> SearchPlayersAsync(
+        string sport, string? q, NbaTrackerDbContext db, CancellationToken ct)
+    {
+        if (!SportRoute.TryNormalize(sport, out sport))
+            return Results.NotFound(new { error = $"Unknown sport: {sport}" });
+
+        if (string.IsNullOrWhiteSpace(q) || q.Length < 2)
+            return Results.Ok(new List<object>());
+
+        var needle = q.ToLower();
+        var players = await db.Players
+            .Include(p => p.Team)
+            .Where(p => p.Sport == sport && p.Name.ToLower().Contains(needle))
+            .OrderBy(p => p.Name)
+            .Take(10)
+            .Select(p => new { p.Id, p.Name, TeamAbbreviation = p.Team != null ? p.Team.Abbreviation : null })
+            .ToListAsync(ct);
+
+        return Results.Ok(players);
     }
 
     // GET /api/{sport}/players/{id} — player bio, season stats, and upcoming prop lines

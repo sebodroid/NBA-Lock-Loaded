@@ -22,6 +22,18 @@ public static class InsightEndpoints
     private const int HotPct = 70;
     private const int ColdPct = 30;
 
+    // A situational split (home/road, favorite/underdog) only earns its own card when it
+    // tells a DIFFERENT story than the season-wide number already shown — either the
+    // direction flips, or it's at least this many points more extreme. Otherwise it's just
+    // the same signal restated (a team that's 4-5 Under overall and 3-3 Under at home isn't
+    // two trends, it's one trend with its home record folded in), which is clutter, not a
+    // second insight. 15 was too low in practice — a situational split is a SUBSET of the
+    // season games (the 3 home games are 3 of the season's 5), so it will often read as
+    // "more extreme" by sample-size noise alone even when it isn't really a different team.
+    // Confirmed via a real example: Bears 4-of-5 Under season (80%) vs. 3-of-3 Under at
+    // home (100%) — a 20-point gap that still read as the same trend to a human, not two.
+    private const int MinDivergencePts = 25;
+
     public static void Map(RouteGroupBuilder group)
     {
         group.MapGet("/", GetInsightsAsync);
@@ -70,7 +82,7 @@ public static class InsightEndpoints
             int atsLosses = homeGames.Count(g => g.GameResult?.HomeAtsResult == AtsResult.Loss)
                           + awayGames.Count(g => g.GameResult?.AwayAtsResult == AtsResult.Loss);
 
-            AddPctInsight(insights, "team-ats", atsCovers, atsLosses, gamesPlayed,
+            var atsBlanket = AddPctInsight(insights, "team-ats", atsCovers, atsLosses, gamesPlayed,
                 hot: $"{team.Name} is {atsCovers}-{atsLosses} against the spread this season.",
                 cold: $"{team.Name} is {atsCovers}-{atsLosses} against the spread this season.");
 
@@ -79,7 +91,7 @@ public static class InsightEndpoints
             int unders = allGames.Count(g => g.GameResult?.OuResult == OuResult.Under);
 
             var (avgScored, avgAllowed) = AvgScoredAllowed(homeGames, awayGames);
-            AddOuInsight(insights, team.Name, "this season", overs, unders, gamesPlayed, avgScored, avgAllowed);
+            var ouBlanket = AddOuInsight(insights, team.Name, "this season", overs, unders, gamesPlayed, avgScored, avgAllowed);
 
             // Situational splits — a blanket season ATS/O-U number can hide the real signal
             // (a team that covers as a dog but gets crushed as a favorite isn't really a
@@ -93,26 +105,26 @@ public static class InsightEndpoints
             AddPctInsight(insights, "team-ats", favCovers, favLosses, favoriteGames.Count,
                 hot: $"{team.Name} is {favCovers}-{favLosses} ATS as the favorite this season.",
                 cold: $"{team.Name} is {favCovers}-{favLosses} ATS as the favorite this season.",
-                minDecisions: MinSplitDecisions);
+                minDecisions: MinSplitDecisions, blanket: atsBlanket);
 
             int dogCovers = CountAts(dogGames, team.Id, AtsResult.Cover);
             int dogLosses = CountAts(dogGames, team.Id, AtsResult.Loss);
             AddPctInsight(insights, "team-ats", dogCovers, dogLosses, dogGames.Count,
                 hot: $"{team.Name} is {dogCovers}-{dogLosses} ATS as the underdog this season.",
                 cold: $"{team.Name} is {dogCovers}-{dogLosses} ATS as the underdog this season.",
-                minDecisions: MinSplitDecisions);
+                minDecisions: MinSplitDecisions, blanket: atsBlanket);
 
             int homeOvers  = homeGames.Count(g => g.GameResult?.OuResult == OuResult.Over);
             int homeUnders = homeGames.Count(g => g.GameResult?.OuResult == OuResult.Under);
             var (homeAvgScored, homeAvgAllowed) = AvgScoredAllowed(homeGames, []);
             AddOuInsight(insights, team.Name, "at home", homeOvers, homeUnders, homeGames.Count,
-                homeAvgScored, homeAvgAllowed, MinSplitDecisions);
+                homeAvgScored, homeAvgAllowed, MinSplitDecisions, blanket: ouBlanket);
 
             int awayOvers  = awayGames.Count(g => g.GameResult?.OuResult == OuResult.Over);
             int awayUnders = awayGames.Count(g => g.GameResult?.OuResult == OuResult.Under);
             var (awayAvgScored, awayAvgAllowed) = AvgScoredAllowed([], awayGames);
             AddOuInsight(insights, team.Name, "on the road", awayOvers, awayUnders, awayGames.Count,
-                awayAvgScored, awayAvgAllowed, MinSplitDecisions);
+                awayAvgScored, awayAvgAllowed, MinSplitDecisions, blanket: ouBlanket);
         }
 
         return insights;
@@ -136,39 +148,56 @@ public static class InsightEndpoints
         games.Count(g => (g.HomeTeamId == teamId && g.GameResult?.HomeAtsResult == result)
                        || (g.AwayTeamId == teamId && g.GameResult?.AwayAtsResult == result));
 
-    private static void AddPctInsight(
+    // Returns the direction+pct it classified as (for the caller to pass back in as a
+    // blanket baseline on a later situational call), or null if it didn't qualify as
+    // hot/cold at all — which also means nothing to compare a situational split against,
+    // so that split can never be suppressed as "redundant" with a trend that doesn't exist.
+    private static (string Direction, int Pct)? AddPctInsight(
         List<InsightResponse> insights, string category, int hitCount, int missCount, int sampleSize,
-        string hot, string cold, int minDecisions = MinGamesForTeamTrend)
+        string hot, string cold, int minDecisions = MinGamesForTeamTrend,
+        (string Direction, int Pct)? blanket = null)
     {
         int decisions = hitCount + missCount;
-        if (decisions < minDecisions) return;
+        if (decisions < minDecisions) return null;
 
         int pct = (int)Math.Round(100.0 * hitCount / decisions);
-        if (pct >= HotPct) insights.Add(new InsightResponse(category, hot, sampleSize));
-        else if (pct <= ColdPct) insights.Add(new InsightResponse(category, cold, sampleSize));
+        string? direction = pct >= HotPct ? "cover" : pct <= ColdPct ? "loss" : null;
+        if (direction is null) return null;
+
+        if (IsRedundant(blanket, direction, pct)) return (direction, pct);
+
+        insights.Add(new InsightResponse(category, direction == "cover" ? hot : cold, sampleSize));
+        return (direction, pct);
     }
 
-    private static void AddOuInsight(
+    private static (string Direction, int Pct)? AddOuInsight(
         List<InsightResponse> insights, string teamName, string scopeLabel,
         int overs, int unders, int sampleSize, decimal avgScored, decimal avgAllowed,
-        int minDecisions = MinGamesForTeamTrend)
+        int minDecisions = MinGamesForTeamTrend, (string Direction, int Pct)? blanket = null)
     {
         int decisions = overs + unders;
-        if (decisions < minDecisions) return;
+        if (decisions < minDecisions) return null;
+
+        int overPct = (int)Math.Round(100.0 * overs / decisions);
+        string? direction = overPct >= HotPct ? "over" : overPct <= ColdPct ? "under" : null;
+        if (direction is null) return null;
+
+        if (IsRedundant(blanket, direction, overPct)) return (direction, overPct);
 
         // Raw scoring context alongside the hit rate — "hits the over 80% of the time"
         // doesn't say whether that's a high-powered offense, a leaky defense, or both,
         // which matters for judging whether the trend is likely to keep holding up.
         var scoring = $"averaging {avgScored:0.1} scored, {avgAllowed:0.1} allowed";
-
-        int overPct = (int)Math.Round(100.0 * overs / decisions);
-        if (overPct >= HotPct)
-            insights.Add(new InsightResponse("team-ou",
-                $"{teamName} games have gone over in {overs} of {decisions} {scopeLabel} ({scoring}).", sampleSize));
-        else if (overPct <= ColdPct)
-            insights.Add(new InsightResponse("team-ou",
-                $"{teamName} games have gone under in {unders} of {decisions} {scopeLabel} ({scoring}).", sampleSize));
+        insights.Add(new InsightResponse("team-ou", direction == "over"
+            ? $"{teamName} games have gone over in {overs} of {decisions} {scopeLabel} ({scoring})."
+            : $"{teamName} games have gone under in {unders} of {decisions} {scopeLabel} ({scoring}).", sampleSize));
+        return (direction, overPct);
     }
+
+    private static bool IsRedundant((string Direction, int Pct)? blanket, string direction, int pct) =>
+        blanket is not null
+        && blanket.Value.Direction == direction
+        && Math.Abs(blanket.Value.Pct - pct) < MinDivergencePts;
 
     // Market-wide signal: across every settled player prop this season, which market
     // TYPES (not individual players — that's Hot Bets' job) have been running hot or

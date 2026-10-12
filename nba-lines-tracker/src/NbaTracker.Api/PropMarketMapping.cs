@@ -58,7 +58,12 @@ public static class PropMarketMapping
     {
         ["player_pass_yds"]          = Single("Passing",   "yard",       "Passing Yards",    None),
         ["player_pass_tds"]          = Single("Passing",   "touchdown",  "Passing TDs",       None),
-        ["player_pass_completions"]  = Single("Passing",   "completion", "Completions",       RateNoise),
+        // Highlightly's real stat name is "Total Successful Passes," not "Completions" —
+        // confirmed via a live stat-names query (2026-10-12). Keyword "completion" never
+        // matched anything, so every Completions prop showed zero games/no estimate for
+        // every player, silently, since this market has no Exclude list to flag the
+        // all-zero result as suspicious.
+        ["player_pass_completions"]  = Single("Passing",   "successful", "Completions",       RateNoise),
         ["player_rush_yds"]          = WithOpportunity("Rushing", "yard", "Rushing Yards", None,
                                             "Rushing", "attempt", "rush att/gm", 8m),
         ["player_rush_attempts"]     = Single("Rushing",   "attempt",    "Rushing Attempts",  RateNoise),

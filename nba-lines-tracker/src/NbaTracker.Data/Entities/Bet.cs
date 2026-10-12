@@ -10,6 +10,8 @@ public enum BetSide { Over, Under, Home, Away }
 public class Bet
 {
     public int Id { get; set; }
+    public int UserId { get; set; }   // every bet belongs to whoever placed it — see migration
+                                       // for how pre-existing bets were backfilled
     public string Sport { get; set; } = null!;
     public int GameId { get; set; }
     public BetKind Kind { get; set; }
@@ -43,4 +45,5 @@ public class Bet
     public Game Game { get; set; } = null!;
     public PlayerPropLine? PlayerPropLine { get; set; }
     public Player? Player { get; set; }
+    public User User { get; set; } = null!;
 }

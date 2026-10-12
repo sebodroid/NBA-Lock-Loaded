@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using NbaTracker.Api.Models;
 using NbaTracker.Data;
@@ -14,23 +15,31 @@ public static class BetEndpoints
         group.MapDelete("/{id:int}", DeleteBetAsync);
     }
 
-    // GET /api/{sport}/bets — every bet placed for this sport, newest first. Outcome is
-    // never a stored status — it's graded live against the actual game result / box score
-    // on every request, so it's always consistent with whatever the Worker has synced,
-    // with no separate settlement job that could fall out of sync.
+    // The JWT's "sub" claim (the user's own ID) arrives here as ClaimTypes.NameIdentifier
+    // — ASP.NET Core's JWT bearer handler maps short claim names to their long .NET
+    // equivalents by default (no MapInboundClaims = false set in Program.cs), so this is
+    // NOT the same string as JwtRegisteredClaimNames.Sub used when the token was issued.
+    private static int GetUserId(ClaimsPrincipal user) =>
+        int.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
+
+    // GET /api/{sport}/bets — this user's own bets for this sport, newest first. Outcome
+    // is never a stored status — it's graded live against the actual game result / box
+    // score on every request, so it's always consistent with whatever the Worker has
+    // synced, with no separate settlement job that could fall out of sync.
     private static async Task<IResult> GetBetsAsync(
-        string sport, NbaTrackerDbContext db, CancellationToken ct)
+        string sport, ClaimsPrincipal user, NbaTrackerDbContext db, CancellationToken ct)
     {
         if (!SportRoute.TryNormalize(sport, out sport))
             return Results.NotFound(new { error = $"Unknown sport: {sport}" });
 
+        var userId = GetUserId(user);
         var bets = await db.Bets
             .Include(b => b.Game).ThenInclude(g => g.HomeTeam)
             .Include(b => b.Game).ThenInclude(g => g.AwayTeam)
             .Include(b => b.Game).ThenInclude(g => g.GameLine)
             .Include(b => b.Player)
             .Include(b => b.PlayerPropLine)
-            .Where(b => b.Sport == sport)
+            .Where(b => b.Sport == sport && b.UserId == userId)
             .OrderByDescending(b => b.PlacedAt)
             .ToListAsync(ct);
 
@@ -45,7 +54,7 @@ public static class BetEndpoints
     // bet itself so later line movement can never retroactively change what it's graded
     // against — the same guarantee a real sportsbook gives you at bet slip confirmation.
     private static async Task<IResult> CreateBetAsync(
-        string sport, CreateBetRequest request, NbaTrackerDbContext db, CancellationToken ct)
+        string sport, CreateBetRequest request, ClaimsPrincipal user, NbaTrackerDbContext db, CancellationToken ct)
     {
         if (!SportRoute.TryNormalize(sport, out sport))
             return Results.NotFound(new { error = $"Unknown sport: {sport}" });
@@ -68,6 +77,7 @@ public static class BetEndpoints
 
         var bet = new Bet
         {
+            UserId = GetUserId(user),
             Sport = sport,
             GameId = game.Id,
             Kind = kind,
@@ -207,12 +217,13 @@ public static class BetEndpoints
     // DELETE /api/{sport}/bets/{id} — for a mis-entered bet. No edit endpoint: odds/lines
     // are point-in-time snapshots, not something that should be revised after the fact.
     private static async Task<IResult> DeleteBetAsync(
-        string sport, int id, NbaTrackerDbContext db, CancellationToken ct)
+        string sport, int id, ClaimsPrincipal user, NbaTrackerDbContext db, CancellationToken ct)
     {
         if (!SportRoute.TryNormalize(sport, out sport))
             return Results.NotFound(new { error = $"Unknown sport: {sport}" });
 
-        var bet = await db.Bets.FirstOrDefaultAsync(b => b.Id == id && b.Sport == sport, ct);
+        var userId = GetUserId(user);
+        var bet = await db.Bets.FirstOrDefaultAsync(b => b.Id == id && b.Sport == sport && b.UserId == userId, ct);
         if (bet is null) return Results.NotFound();
 
         db.Bets.Remove(bet);

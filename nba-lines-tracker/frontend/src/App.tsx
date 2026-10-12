@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { createBrowserRouter, RouterProvider, Navigate, Outlet, useParams } from 'react-router-dom'
 import { LoginPage } from '@/components/auth/LoginPage'
+import { RegisterPage } from '@/components/auth/RegisterPage'
 import { MainPage } from '@/components/layout/MainPage'
 import { useAppStore } from '@/store/useAppStore'
 import { tryRestoreSession } from '@/api/auth'
@@ -33,20 +34,25 @@ const router = createBrowserRouter([
   },
   {
     element: <PublicRoute />,
-    children: [{ path: '/login', element: <LoginPage /> }],
+    children: [
+      { path: '/login', element: <LoginPage /> },
+      { path: '/register', element: <RegisterPage /> },
+    ],
   },
 ])
 
 export default function App() {
   const setAuthenticated = useAppStore(s => s.setAuthenticated)
+  const setIsAdmin = useAppStore(s => s.setIsAdmin)
   const [restoring, setRestoring] = useState(true)
 
   useEffect(() => {
-    tryRestoreSession().then(ok => {
+    tryRestoreSession().then(({ ok, isAdmin }) => {
       setAuthenticated(ok)
+      setIsAdmin(isAdmin)
       setRestoring(false)
     })
-  }, [setAuthenticated])
+  }, [setAuthenticated, setIsAdmin])
 
   if (restoring) {
     return (

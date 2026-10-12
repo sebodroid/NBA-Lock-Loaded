@@ -14,6 +14,8 @@ import { PlaceBetModal } from '@/components/bets/PlaceBetModal'
 import { MyBetsPage } from '@/components/bets/MyBetsPage'
 import { HotBetsPage } from '@/components/bets/HotBetsPage'
 import { ParlaysPage } from '@/components/bets/ParlaysPage'
+import { AdminPage } from '@/components/admin/AdminPage'
+import { CustomLinePage } from '@/components/bets/CustomLinePage'
 import { PaletteMenu } from '@/components/layout/PaletteMenu'
 import { useAppStore } from '@/store/useAppStore'
 import { useTeams } from '@/api/teams'
@@ -26,6 +28,8 @@ const VIEWS = [
   { key: 'bets', label: 'My Bets' },
   { key: 'hot', label: 'Hot Bets' },
   { key: 'parlays', label: 'Parlays' },
+  { key: 'custom', label: 'Check a Line' },
+  { key: 'admin', label: 'Admin' },
 ] as const
 type View = typeof VIEWS[number]['key']
 
@@ -35,6 +39,7 @@ export function MainPage() {
   const theme = useAppStore(s => s.theme)
   const toggleTheme = useAppStore(s => s.toggleTheme)
   const setAuthenticated = useAppStore(s => s.setAuthenticated)
+  const isAdmin = useAppStore(s => s.isAdmin)
   const { data: teams = [] } = useTeams()
   const [view, setView] = useState<View>('dashboard')
 
@@ -121,7 +126,7 @@ export function MainPage() {
       <div className="border-b bg-background/95">
         <div className="max-w-screen-xl mx-auto px-4">
           <nav className="flex items-center gap-1 py-2">
-            {VIEWS.map(v => (
+            {VIEWS.filter(v => v.key !== 'admin' || isAdmin).map(v => (
               <button
                 key={v.key}
                 onClick={() => setView(v.key)}
@@ -156,7 +161,22 @@ export function MainPage() {
         {view === 'bets' && <MyBetsPage />}
         {view === 'hot' && <HotBetsPage />}
         {view === 'parlays' && <ParlaysPage />}
+        {view === 'custom' && <CustomLinePage />}
+        {view === 'admin' && isAdmin && <AdminPage />}
       </main>
+
+      <footer className="border-t mt-8">
+        <div className="max-w-screen-xl mx-auto px-4 py-4">
+          <p className="text-[11px] text-muted-foreground leading-relaxed">
+            For entertainment and informational purposes only. Nothing on this site is
+            betting, financial, or professional advice, and nothing here guarantees any
+            outcome — all stats, estimates, and suggestions are historical patterns, not
+            predictions. You are solely responsible for any decisions you make. If you or
+            someone you know has a gambling problem, call or text the National Problem
+            Gambling Helpline at 1-800-522-4700.
+          </p>
+        </div>
+      </footer>
 
       <PlayerCardModal />
       <GamePropsModal />

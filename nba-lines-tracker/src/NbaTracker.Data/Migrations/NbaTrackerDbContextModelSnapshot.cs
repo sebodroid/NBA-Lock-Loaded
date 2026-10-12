@@ -79,6 +79,9 @@ namespace NbaTracker.Data.Migrations
                     b.Property<decimal>("ToWinAmount")
                         .HasColumnType("numeric");
 
+                    b.Property<int>("UserId")
+                        .HasColumnType("integer");
+
                     b.HasKey("Id");
 
                     b.HasIndex("GameId");
@@ -88,6 +91,8 @@ namespace NbaTracker.Data.Migrations
                     b.HasIndex("PlayerPropLineId");
 
                     b.HasIndex("Sport", "PlacedAt");
+
+                    b.HasIndex("UserId", "Sport");
 
                     b.ToTable("Bets");
                 });
@@ -596,6 +601,11 @@ namespace NbaTracker.Data.Migrations
                     b.Property<bool>("IsAdmin")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("IsApproved")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
                     b.Property<DateTime?>("LastLoginAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -633,11 +643,19 @@ namespace NbaTracker.Data.Migrations
                         .HasForeignKey("PlayerPropLineId")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("NbaTracker.Data.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
                     b.Navigation("Game");
 
                     b.Navigation("Player");
 
                     b.Navigation("PlayerPropLine");
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("NbaTracker.Data.Entities.Game", b =>
