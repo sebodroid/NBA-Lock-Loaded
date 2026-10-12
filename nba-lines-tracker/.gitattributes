@@ -1,0 +1,4 @@
+# Shell scripts must keep LF endings regardless of the committer's local autocrlf
+# setting — a CRLF shebang line ("#!/usr/bin/env bash\r") fails to find an
+# interpreter on macOS/Linux and breaks these scripts silently.
+*.sh text eol=lf

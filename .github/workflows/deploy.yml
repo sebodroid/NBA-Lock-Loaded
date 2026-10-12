@@ -1,0 +1,69 @@
+# Required GitHub Actions secrets (Settings -> Secrets and variables -> Actions):
+# SERVER_HOST    — Hetzner server public IP address (e.g., 5.161.x.x)
+# SERVER_USER    — SSH login username (typically 'root')
+# SERVER_SSH_KEY — Full content of the SSH private key (including -----BEGIN/END lines)
+# GHCR_TOKEN     — GitHub PAT with read:packages scope (classic PAT, not fine-grained)
+
+name: Build and Deploy
+
+on:
+  push:
+    branches: [master]
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push API image
+        uses: docker/build-push-action@v6
+        with:
+          context: nba-lines-tracker
+          file: nba-lines-tracker/src/NbaTracker.Api/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/sebodroid/nba-lock-loaded/api:latest
+            ghcr.io/sebodroid/nba-lock-loaded/api:sha-${{ github.sha }}
+
+      - name: Build and push Worker image
+        uses: docker/build-push-action@v6
+        with:
+          context: nba-lines-tracker
+          file: nba-lines-tracker/src/NbaTracker.Worker/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/sebodroid/nba-lock-loaded/worker:latest
+            ghcr.io/sebodroid/nba-lock-loaded/worker:sha-${{ github.sha }}
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy to server via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          port: 22
+          script: |
+            echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            cd /root/app
+            git pull origin master
+            cd nba-lines-tracker
+            docker compose -f docker-compose.prod.yml pull
+            docker compose -f docker-compose.prod.yml up -d --remove-orphans
+            docker image prune -f

@@ -1,0 +1,31 @@
+# PostgreSQL: Aiven cloud DB — see .env for connection string. No local db service.
+services:
+  api:
+    # Replace OWNER below with your GitHub username (lowercase) if you fork this repo.
+    image: ghcr.io/sebodroid/nba-lock-loaded/api:latest
+    restart: unless-stopped
+    env_file:
+      - .env
+    expose:
+      - "8080"
+
+  worker:
+    image: ghcr.io/sebodroid/nba-lock-loaded/worker:latest
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - worker_logs:/logs
+
+  nginx:
+    image: nginx:alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.prod.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - api
+
+volumes:
+  worker_logs:

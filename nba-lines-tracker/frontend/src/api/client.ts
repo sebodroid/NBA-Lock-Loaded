@@ -4,8 +4,13 @@ import axios from 'axios'
 // Refresh token lives in localStorage (survives page reload)
 let accessToken: string | null = null
 
+// Dev: Vite's proxy handles /api/* on the same origin, so this stays empty.
+// Prod: frontend (Cloudflare Pages) and API (own server) are different origins —
+// VITE_API_URL is baked in at build time (Cloudflare Pages dashboard env var).
+const apiBaseUrl = import.meta.env.VITE_API_URL ?? ''
+
 export const apiClient = axios.create({
-  baseURL: '',   // Vite proxy handles /api/* routing in dev; nginx in production
+  baseURL: apiBaseUrl,
 })
 
 export function setAccessToken(token: string | null) {
@@ -46,7 +51,7 @@ apiClient.interceptors.response.use(
         const refreshToken = localStorage.getItem('refreshToken')
         if (!refreshToken) throw new Error('No refresh token')
 
-        const { data } = await axios.post('/api/auth/refresh', { refreshToken })
+        const { data } = await axios.post(`${apiBaseUrl}/api/auth/refresh`, { refreshToken })
         setAccessToken(data.accessToken)
         localStorage.setItem('refreshToken', data.refreshToken)
 
