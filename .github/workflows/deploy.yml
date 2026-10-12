@@ -66,4 +66,10 @@ jobs:
             cd nba-lines-tracker
             docker compose -f docker-compose.prod.yml pull
             docker compose -f docker-compose.prod.yml up -d --remove-orphans
+            # nginx's proxy_pass resolves the "api" hostname once at startup and
+            # caches it — recreating just the api container above gives it a new
+            # internal Docker IP that nginx won't notice on its own, so force a
+            # restart every deploy rather than relying on compose to decide nginx
+            # needs one (its image/config didn't change, so compose wouldn't).
+            docker compose -f docker-compose.prod.yml restart nginx
             docker image prune -f
