@@ -265,6 +265,40 @@ namespace NbaTracker.Data.Migrations
                     b.ToTable("GameResults");
                 });
 
+            modelBuilder.Entity("NbaTracker.Data.Entities.GameWeatherForecast", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("GameId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("PrecipitationChancePct")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ShortForecast")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("TemperatureF")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("WindSpeed")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("GameId")
+                        .IsUnique();
+
+                    b.ToTable("GameWeatherForecasts");
+                });
+
             modelBuilder.Entity("NbaTracker.Data.Entities.Player", b =>
                 {
                     b.Property<int>("Id")
@@ -659,6 +693,17 @@ namespace NbaTracker.Data.Migrations
                     b.HasOne("NbaTracker.Data.Entities.Game", "Game")
                         .WithOne("GameResult")
                         .HasForeignKey("NbaTracker.Data.Entities.GameResult", "GameId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Game");
+                });
+
+            modelBuilder.Entity("NbaTracker.Data.Entities.GameWeatherForecast", b =>
+                {
+                    b.HasOne("NbaTracker.Data.Entities.Game", "Game")
+                        .WithMany()
+                        .HasForeignKey("GameId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 

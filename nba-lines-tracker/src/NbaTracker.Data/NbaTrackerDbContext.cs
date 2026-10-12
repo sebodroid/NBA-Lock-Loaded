@@ -21,6 +21,7 @@ public class NbaTrackerDbContext : DbContext
     public DbSet<PlayerPropLine> PlayerPropLines => Set<PlayerPropLine>();
     public DbSet<Bet> Bets => Set<Bet>();
     public DbSet<PlayerInjuryStatus> PlayerInjuryStatuses => Set<PlayerInjuryStatus>();
+    public DbSet<GameWeatherForecast> GameWeatherForecasts => Set<GameWeatherForecast>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -192,6 +193,18 @@ public class NbaTrackerDbContext : DbContext
 
         modelBuilder.Entity<PlayerInjuryStatus>()
             .HasIndex(i => i.PlayerId)
+            .IsUnique();
+
+        // GameWeatherForecast — one row per outdoor-venue game, upserted as the forecast
+        // sharpens closer to kickoff
+        modelBuilder.Entity<GameWeatherForecast>()
+            .HasOne(w => w.Game)
+            .WithMany()
+            .HasForeignKey(w => w.GameId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<GameWeatherForecast>()
+            .HasIndex(w => w.GameId)
             .IsUnique();
     }
 }

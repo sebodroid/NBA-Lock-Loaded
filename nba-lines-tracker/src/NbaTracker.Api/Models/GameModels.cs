@@ -9,7 +9,9 @@ public record TeamSeasonStats(
     int AtsPushes,
     int OuOvers,
     int OuUnders,
-    int OuPushes
+    int OuPushes,
+    decimal AvgPointsScored,
+    decimal AvgPointsAllowed
 );
 
 public record H2HGameEntry(
@@ -65,5 +67,13 @@ public record TodayMatchupResponse(
     string? Bookmaker,
     TeamSeasonStats HomeStats,
     TeamSeasonStats AwayStats,
-    List<H2HGameEntry> HeadToHead
+    List<H2HGameEntry> HeadToHead,
+    GameWeatherSummary? Weather   // null for indoor/retractable-roof venues — nothing to flag
+);
+
+public record GameWeatherSummary(
+    int? TemperatureF,
+    string? WindSpeed,
+    int? PrecipitationChancePct,
+    string? ShortForecast
 );

@@ -136,7 +136,7 @@ public static class PlayerEndpoints
             return new PropEstimate(
                 line.Id, line.MarketKey, label, category, line.Line, line.OverOdds, line.UnderOdds,
                 line.Bookmaker, line.UnderBookmaker, opponentTeam?.Abbreviation ?? "?", "current",
-                0, null, 0, null, null, null, null, 0, null);
+                0, null, 0, null, null, null, null, 0, null, null, null);
         }
 
         var keyword = mapping.Keyword.ToLower();
@@ -193,6 +193,36 @@ public static class PlayerEndpoints
             ? Math.Round(100m * recentGames.Count(x => x.Value > line.Line) / recentGamesWithData, 1)
             : null;
 
+        // Opportunity signal — see PropMarketMapping for why this exists. Same statBasis
+        // (current vs. prior season) as the main stat, so it's reading the same window of
+        // games, just a different column.
+        decimal? opportunityAvg = null;
+        if (mapping.OpportunityComponents is not null)
+        {
+            decimal componentSum = 0m;
+            bool anyData = false;
+            foreach (var (oppCategory, oppKeywordRaw) in mapping.OpportunityComponents)
+            {
+                var oppKeyword = oppKeywordRaw.ToLower();
+                var oppQuery = db.PlayerGameStats.Where(s =>
+                    s.PlayerId == player.Id
+                    && s.Category == oppCategory
+                    && s.StatName.ToLower().Contains(oppKeyword)
+                    && s.Value.HasValue);
+                oppQuery = usePrior
+                    ? oppQuery.Where(s => s.Game.Season == priorSeason)
+                    : oppQuery.Where(s => s.Game.GameDate >= statsStart);
+
+                var oppPerGame = await PerGameValuesAsync(oppQuery, [], ct);
+                if (oppPerGame.Count > 0)
+                {
+                    componentSum += oppPerGame.Average(x => x.Value);
+                    anyData = true;
+                }
+            }
+            if (anyData) opportunityAvg = Math.Round(componentSum, 1);
+        }
+
         // Without a resolved opponent there's no defensive context to compute — return the
         // player's own history (which may be the prior season) and stop there.
         if (opponentTeam is null)
@@ -201,7 +231,7 @@ public static class PlayerEndpoints
                 line.Id, line.MarketKey, label, category, line.Line, line.OverOdds, line.UnderOdds,
                 line.Bookmaker, line.UnderBookmaker, "?", statBasis,
                 gamesWithData, seasonAverage, hitCount, hitRatePct, null, null, null,
-                recentGamesWithData, recentHitRatePct);
+                recentGamesWithData, recentHitRatePct, opportunityAvg, mapping.OpportunityLabel);
         }
 
         // League-wide context for this market+season-basis — what every team allows,
@@ -244,7 +274,7 @@ public static class PlayerEndpoints
             line.Bookmaker, line.UnderBookmaker, opponentTeam.Abbreviation, statBasis,
             gamesWithData, seasonAverage, hitCount, hitRatePct,
             opponentAllowedAverage, leagueAllowedAverage, estimatedHitRatePct,
-            recentGamesWithData, recentHitRatePct);
+            recentGamesWithData, recentHitRatePct, opportunityAvg, mapping.OpportunityLabel);
     }
 
     // Runs the league-wide "what does every team allow in this stat" query once. Extracted

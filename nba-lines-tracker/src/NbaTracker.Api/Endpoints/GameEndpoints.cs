@@ -199,6 +199,11 @@ public static class GameEndpoints
                          && ((g.Season == season && g.GameDate >= statsStart) || g.Season == priorSeason))
                 .ToListAsync(ct);
 
+        var todayGameIds = todayGames.Select(g => g.Id).ToHashSet();
+        var weatherByGameId = await db.GameWeatherForecasts
+            .Where(w => todayGameIds.Contains(w.GameId))
+            .ToDictionaryAsync(w => w.GameId, ct);
+
         var result = todayGames.Select(game =>
         {
             int homeId = game.HomeTeamId;
@@ -255,7 +260,10 @@ public static class GameEndpoints
                 game.GameLine?.Bookmaker,
                 homeStats,
                 awayStats,
-                h2hEntries
+                h2hEntries,
+                weatherByGameId.TryGetValue(game.Id, out var w)
+                    ? new GameWeatherSummary(w.TemperatureF, w.WindSpeed, w.PrecipitationChancePct, w.ShortForecast)
+                    : null
             );
         }).ToList();
 
@@ -285,11 +293,19 @@ public static class GameEndpoints
         int ouUnders  = allGames.Count(g => g.GameResult?.OuResult == OuResult.Under);
         int ouPushes  = allGames.Count(g => g.GameResult?.OuResult == OuResult.Push);
 
+        var scored = homeGames.Select(g => (decimal)(g.HomeScore ?? 0))
+            .Concat(awayGames.Select(g => (decimal)(g.AwayScore ?? 0))).ToList();
+        var allowed = homeGames.Select(g => (decimal)(g.AwayScore ?? 0))
+            .Concat(awayGames.Select(g => (decimal)(g.HomeScore ?? 0))).ToList();
+        decimal avgScored = scored.Count > 0 ? scored.Average() : 0m;
+        decimal avgAllowed = allowed.Count > 0 ? allowed.Average() : 0m;
+
         return new TeamSeasonStats(
             homeGames.Count + awayGames.Count,
             wins, losses,
             atsCovers, atsLosses, atsPushes,
-            ouOvers, ouUnders, ouPushes
+            ouOvers, ouUnders, ouPushes,
+            avgScored, avgAllowed
         );
     }
 }

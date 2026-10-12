@@ -87,6 +87,12 @@ export function HotBetsPage() {
                     </p>
                   )}
 
+                  {e.opportunityAvg !== null && (
+                    <p className="text-xs text-muted-foreground">
+                      {e.opportunityAvg} {e.opportunityLabel}
+                    </p>
+                  )}
+
                   <button
                     onClick={() => openBetDraft({
                       gameId: hb.gameId,

@@ -41,6 +41,17 @@ public static class HotBetsEndpoints
 
         limit = Math.Clamp(limit, 1, 25);
 
+        var ranked = await GetRankedCandidatesAsync(sport, db, ct);
+        return Results.Ok(ranked.Take(limit).ToList());
+    }
+
+    // Internal, not private — ParlayEndpoints reuses the exact same ranked/vetted pool
+    // of player props (same hit-rate floor, same recent-form and opportunity vetoes) as
+    // raw material for parlay legs, rather than re-deriving a separate, possibly
+    // inconsistent notion of "a good prop bet."
+    internal static async Task<List<HotBetEntry>> GetRankedCandidatesAsync(
+        string sport, NbaTrackerDbContext db, CancellationToken ct)
+    {
         var today = ApiClock.Today;
         var endDate = today.AddDays(LookaheadDays - 1);
         var statsStart = SeasonHelper.StatsStartDate(sport, today);
@@ -90,6 +101,14 @@ public static class HotBetsEndpoints
                 && estimate.RecentHitRatePct is not null
                 && estimate.RecentHitRatePct < RecentFormVetoPct) continue;
 
+            // Veto: a high hit rate built on thin volume isn't a repeatable edge — see
+            // PropMarketMapping's Opportunity* fields. Not every market tracks this
+            // (OpportunityMinAvg is null for most), so this only fires where it applies.
+            var opportunityFloor = PropMarketMapping.TryGetMapping(line.MarketKey)?.OpportunityMinAvg;
+            if (opportunityFloor is not null
+                && estimate.OpportunityAvg is not null
+                && estimate.OpportunityAvg < opportunityFloor) continue;
+
             candidates.Add(new HotBetEntry(
                 line.Player.Id,
                 line.Player.Name,
@@ -103,12 +122,9 @@ public static class HotBetsEndpoints
             ));
         }
 
-        var ranked = candidates
+        return candidates
             .OrderByDescending(c => c.Estimate.EstimatedHitRatePct ?? c.Estimate.HitRatePct)
             .ThenByDescending(c => c.Estimate.GamesWithData)
-            .Take(limit)
             .ToList();
-
-        return Results.Ok(ranked);
     }
 }

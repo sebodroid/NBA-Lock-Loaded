@@ -78,7 +78,8 @@ public static class InsightEndpoints
             int overs  = allGames.Count(g => g.GameResult?.OuResult == OuResult.Over);
             int unders = allGames.Count(g => g.GameResult?.OuResult == OuResult.Under);
 
-            AddOuInsight(insights, team.Name, "this season", overs, unders, gamesPlayed);
+            var (avgScored, avgAllowed) = AvgScoredAllowed(homeGames, awayGames);
+            AddOuInsight(insights, team.Name, "this season", overs, unders, gamesPlayed, avgScored, avgAllowed);
 
             // Situational splits — a blanket season ATS/O-U number can hide the real signal
             // (a team that covers as a dog but gets crushed as a favorite isn't really a
@@ -103,14 +104,32 @@ public static class InsightEndpoints
 
             int homeOvers  = homeGames.Count(g => g.GameResult?.OuResult == OuResult.Over);
             int homeUnders = homeGames.Count(g => g.GameResult?.OuResult == OuResult.Under);
-            AddOuInsight(insights, team.Name, "at home", homeOvers, homeUnders, homeGames.Count, MinSplitDecisions);
+            var (homeAvgScored, homeAvgAllowed) = AvgScoredAllowed(homeGames, []);
+            AddOuInsight(insights, team.Name, "at home", homeOvers, homeUnders, homeGames.Count,
+                homeAvgScored, homeAvgAllowed, MinSplitDecisions);
 
             int awayOvers  = awayGames.Count(g => g.GameResult?.OuResult == OuResult.Over);
             int awayUnders = awayGames.Count(g => g.GameResult?.OuResult == OuResult.Under);
-            AddOuInsight(insights, team.Name, "on the road", awayOvers, awayUnders, awayGames.Count, MinSplitDecisions);
+            var (awayAvgScored, awayAvgAllowed) = AvgScoredAllowed([], awayGames);
+            AddOuInsight(insights, team.Name, "on the road", awayOvers, awayUnders, awayGames.Count,
+                awayAvgScored, awayAvgAllowed, MinSplitDecisions);
         }
 
         return insights;
+    }
+
+    // Points scored/allowed per game across a home+away split, from final scores
+    // already on hand — no extra query, Game.HomeScore/AwayScore are set once a
+    // game goes FINAL.
+    private static (decimal AvgScored, decimal AvgAllowed) AvgScoredAllowed(
+        List<Game> homeGames, List<Game> awayGames)
+    {
+        var scored = homeGames.Select(g => (decimal)(g.HomeScore ?? 0))
+            .Concat(awayGames.Select(g => (decimal)(g.AwayScore ?? 0))).ToList();
+        var allowed = homeGames.Select(g => (decimal)(g.AwayScore ?? 0))
+            .Concat(awayGames.Select(g => (decimal)(g.HomeScore ?? 0))).ToList();
+
+        return scored.Count > 0 ? (scored.Average(), allowed.Average()) : (0m, 0m);
     }
 
     private static int CountAts(List<Game> games, int teamId, AtsResult result) =>
@@ -131,18 +150,24 @@ public static class InsightEndpoints
 
     private static void AddOuInsight(
         List<InsightResponse> insights, string teamName, string scopeLabel,
-        int overs, int unders, int sampleSize, int minDecisions = MinGamesForTeamTrend)
+        int overs, int unders, int sampleSize, decimal avgScored, decimal avgAllowed,
+        int minDecisions = MinGamesForTeamTrend)
     {
         int decisions = overs + unders;
         if (decisions < minDecisions) return;
 
+        // Raw scoring context alongside the hit rate — "hits the over 80% of the time"
+        // doesn't say whether that's a high-powered offense, a leaky defense, or both,
+        // which matters for judging whether the trend is likely to keep holding up.
+        var scoring = $"averaging {avgScored:0.1} scored, {avgAllowed:0.1} allowed";
+
         int overPct = (int)Math.Round(100.0 * overs / decisions);
         if (overPct >= HotPct)
             insights.Add(new InsightResponse("team-ou",
-                $"{teamName} games have gone over in {overs} of {decisions} {scopeLabel}.", sampleSize));
+                $"{teamName} games have gone over in {overs} of {decisions} {scopeLabel} ({scoring}).", sampleSize));
         else if (overPct <= ColdPct)
             insights.Add(new InsightResponse("team-ou",
-                $"{teamName} games have gone under in {unders} of {decisions} {scopeLabel}.", sampleSize));
+                $"{teamName} games have gone under in {unders} of {decisions} {scopeLabel} ({scoring}).", sampleSize));
     }
 
     // Market-wide signal: across every settled player prop this season, which market

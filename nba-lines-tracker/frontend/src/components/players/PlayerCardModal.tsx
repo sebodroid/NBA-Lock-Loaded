@@ -65,6 +65,12 @@ function PropCard({ prop }: { prop: PropEstimate }) {
                 </span>{' '}
                 ({prop.hitRatePct}%)
               </p>
+              {prop.opportunityAvg !== null && (
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {prop.opportunityAvg} {prop.opportunityLabel} — a hit rate built on real volume
+                  holds up better than one built on an efficient outlier game.
+                </p>
+              )}
             </div>
 
             {prop.recentGamesWithData > 0 && (

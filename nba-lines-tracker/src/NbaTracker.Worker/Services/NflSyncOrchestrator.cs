@@ -14,8 +14,13 @@ public class NflSyncOrchestrator
     private readonly NflStatsClient _nflClient;
     private readonly OddsApiClient _oddsClient;
     private readonly EspnInjuryClient _injuryClient;
+    private readonly WeatherClient _weatherClient;
     private readonly IConfiguration _config;
     private readonly ILogger<NflSyncOrchestrator> _logger;
+
+    // How far ahead to fetch forecasts — matches Hot Bets' own lookahead, and sits well
+    // inside NWS's ~7-day forecast range so every fetched game actually has data.
+    private const int WeatherLookaheadDays = 7;
 
     private static readonly TimeZoneInfo EasternTime = GameMatchingService.GetEasternTimeZone();
 
@@ -50,6 +55,7 @@ public class NflSyncOrchestrator
         NflStatsClient nflClient,
         OddsApiClient oddsClient,
         EspnInjuryClient injuryClient,
+        WeatherClient weatherClient,
         IConfiguration config,
         ILogger<NflSyncOrchestrator> logger)
     {
@@ -57,6 +63,7 @@ public class NflSyncOrchestrator
         _nflClient = nflClient;
         _oddsClient = oddsClient;
         _injuryClient = injuryClient;
+        _weatherClient = weatherClient;
         _config = config;
         _logger = logger;
     }
@@ -596,6 +603,73 @@ public class NflSyncOrchestrator
         _logger.LogInformation(
             "[NFL] Injury report: {Matched} matched, {Unmatched} unrecognized names, {Cleared} cleared",
             matched, unmatched, stale.Count);
+    }
+
+    // Not date-scoped, same reasoning as SyncInjuriesAsync — a forecast is a
+    // point-in-time read against upcoming games, not something tied to one sync date,
+    // so this runs once per rolling-window cycle covering the whole lookahead window.
+    public async Task SyncWeatherAsync(CancellationToken ct)
+    {
+        var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, EasternTime));
+        var endDate = today.AddDays(WeatherLookaheadDays - 1);
+
+        var upcomingGames = await _db.Games
+            .Include(g => g.HomeTeam)
+            .Where(g => g.Sport == "NFL"
+                     && g.GameDate >= today
+                     && g.GameDate <= endDate
+                     && g.Status != "FINAL"
+                     && g.Status != "POSTPONED")
+            .ToListAsync(ct);
+
+        int fetched = 0, skippedIndoor = 0, failed = 0;
+
+        foreach (var game in upcomingGames)
+        {
+            var venue = NflVenues.TryGetVenue(game.HomeTeam.Abbreviation);
+            if (venue is null || !venue.Value.IsOutdoor)
+            {
+                skippedIndoor++;
+                continue;
+            }
+
+            var forecast = await _weatherClient.GetGameDayForecastAsync(
+                venue.Value.Latitude, venue.Value.Longitude, game.GameDate, ct);
+            if (forecast is null)
+            {
+                failed++;
+                continue;
+            }
+
+            var existing = await _db.GameWeatherForecasts.FirstOrDefaultAsync(w => w.GameId == game.Id, ct);
+            if (existing is null)
+            {
+                _db.GameWeatherForecasts.Add(new GameWeatherForecast
+                {
+                    GameId = game.Id,
+                    TemperatureF = forecast.TemperatureF,
+                    WindSpeed = forecast.WindSpeed,
+                    PrecipitationChancePct = forecast.PrecipitationChancePct,
+                    ShortForecast = forecast.ShortForecast,
+                    UpdatedAt = DateTime.UtcNow
+                });
+            }
+            else
+            {
+                existing.TemperatureF = forecast.TemperatureF;
+                existing.WindSpeed = forecast.WindSpeed;
+                existing.PrecipitationChancePct = forecast.PrecipitationChancePct;
+                existing.ShortForecast = forecast.ShortForecast;
+                existing.UpdatedAt = DateTime.UtcNow;
+            }
+
+            fetched++;
+        }
+
+        await _db.SaveChangesAsync(ct);
+        _logger.LogInformation(
+            "[NFL] Weather: {Fetched} fetched, {SkippedIndoor} indoor/retractable skipped, {Failed} lookup failures",
+            fetched, skippedIndoor, failed);
     }
 
     /// <summary>

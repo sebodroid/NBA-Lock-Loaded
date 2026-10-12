@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { AtsCell } from '@/components/grid/AtsCell'
 import { TeamLogo } from '@/components/ui/team-logo'
+import { WeatherBadge } from '@/components/ui/weather-badge'
 import { calcAtsPct, calcOuPct } from '@/types/api'
 import { useGamePreview, useGameProps } from '@/api/games'
 import { useAppStore } from '@/store/useAppStore'
@@ -160,10 +161,11 @@ export function MatchupCard({ matchup }: MatchupCardProps) {
         </div>
 
         {/* Line */}
-        <div className="flex justify-center gap-4 text-xs text-muted-foreground">
+        <div className="flex justify-center items-center gap-4 text-xs text-muted-foreground">
           <span>{spreadText}</span>
           <span>·</span>
           <span>{totalText}</span>
+          <WeatherBadge weather={matchup.weather} />
         </div>
 
         {/* Spread/total bet buttons — only before kickoff, only when a line exists */}
@@ -256,6 +258,15 @@ export function MatchupCard({ matchup }: MatchupCardProps) {
                 <td className="py-0.5 text-muted-foreground">O/U%</td>
                 <td className="py-0.5 text-center"><AtsCell pct={homeOuPct} /></td>
                 <td className="py-0.5 text-center"><AtsCell pct={awayOuPct} /></td>
+              </tr>
+              <tr>
+                <td className="py-0.5 text-muted-foreground" title="Points scored / allowed per game">Pts/G</td>
+                <td className="py-0.5 text-center tabular-nums">
+                  {homeStats.avgPointsScored.toFixed(1)} / {homeStats.avgPointsAllowed.toFixed(1)}
+                </td>
+                <td className="py-0.5 text-center tabular-nums">
+                  {awayStats.avgPointsScored.toFixed(1)} / {awayStats.avgPointsAllowed.toFixed(1)}
+                </td>
               </tr>
             </tbody>
           </table>

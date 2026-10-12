@@ -139,4 +139,7 @@ BetEndpoints.Map(api.MapGroup("/{sport}/bets").RequireAuthorization());
 // Hot bets endpoints — sport-scoped, any authenticated user
 HotBetsEndpoints.Map(api.MapGroup("/{sport}/hot-bets").RequireAuthorization());
 
+// Parlay suggestion endpoints — sport-scoped, any authenticated user
+ParlayEndpoints.Map(api.MapGroup("/{sport}/parlays").RequireAuthorization());
+
 app.Run();

@@ -146,6 +146,28 @@ builder.Services.AddHttpClient<EspnInjuryClient>(client =>
     pipeline.AddTimeout(TimeSpan.FromSeconds(30));
 });
 
+// National Weather Service — api.weather.gov. Free, no signup, no API key; NWS's only
+// requirement is a descriptive User-Agent identifying the app/contact (their usage
+// policy, not an auth mechanism).
+builder.Services.AddHttpClient<WeatherClient>(client =>
+{
+    client.BaseAddress = new Uri("https://api.weather.gov/");
+    client.Timeout = TimeSpan.FromSeconds(15);
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("(bettehouse.app, nba-lines-tracker contact via GitHub)");
+    client.DefaultRequestHeaders.Accept.ParseAdd("application/geo+json");
+})
+.AddResilienceHandler("WeatherRetry", pipeline =>
+{
+    pipeline.AddRetry(new HttpRetryStrategyOptions
+    {
+        MaxRetryAttempts = 2,
+        BackoffType = DelayBackoffType.Exponential,
+        UseJitter = true,
+        Delay = TimeSpan.FromSeconds(2)
+    });
+    pipeline.AddTimeout(TimeSpan.FromSeconds(15));
+});
+
 // The Odds API — shared by NBA and MLB, sport key passed per call
 builder.Services.AddHttpClient<OddsApiClient>(client =>
 {

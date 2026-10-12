@@ -13,6 +13,7 @@ import { GamePropsModal } from '@/components/matchups/GamePropsModal'
 import { PlaceBetModal } from '@/components/bets/PlaceBetModal'
 import { MyBetsPage } from '@/components/bets/MyBetsPage'
 import { HotBetsPage } from '@/components/bets/HotBetsPage'
+import { ParlaysPage } from '@/components/bets/ParlaysPage'
 import { PaletteMenu } from '@/components/layout/PaletteMenu'
 import { useAppStore } from '@/store/useAppStore'
 import { useTeams } from '@/api/teams'
@@ -24,6 +25,7 @@ const VIEWS = [
   { key: 'dashboard', label: 'Dashboard' },
   { key: 'bets', label: 'My Bets' },
   { key: 'hot', label: 'Hot Bets' },
+  { key: 'parlays', label: 'Parlays' },
 ] as const
 type View = typeof VIEWS[number]['key']
 
@@ -153,6 +155,7 @@ export function MainPage() {
         )}
         {view === 'bets' && <MyBetsPage />}
         {view === 'hot' && <HotBetsPage />}
+        {view === 'parlays' && <ParlaysPage />}
       </main>
 
       <PlayerCardModal />

@@ -18,7 +18,26 @@ public static class PropMarketMapping
     // almost always one, except "anytime TD" which can come from either rushing or
     // receiving. DisplayCategory: the single tab this market's props are grouped under in
     // the UI, which doesn't have to match StatCategories one-for-one.
-    public record Mapping(string[] StatCategories, string DisplayCategory, string Keyword, string Label, string[] Exclude);
+    //
+    // Opportunity* fields are a second, independent signal from the stat itself: how often
+    // the player is actually getting the ball, not just whether they cleared the line.
+    // A high hit rate built on 3 targets/game isn't the repeatable kind of edge a high hit
+    // rate on 9 targets/game is — the "Tez Johnson vs. Godwin" problem (one or the other can
+    // have an outlier game regardless of role). Null means "not tracked for this market" —
+    // passing props skip it (a healthy starting QB plays essentially every snap already,
+    // so there's no real opportunity variance to catch the way there is for pass-catchers
+    // and runners), and the Rush Attempts market itself skips it since attempts already IS
+    // the opportunity measure, not something separate from it.
+    // OpportunityComponents can hold more than one (category, keyword) pair — Anytime TD
+    // needs both rush attempts AND targets summed, since either pathway can produce the
+    // score. Each component's season average is computed independently (its own PerGame
+    // query) and the averages are summed — a close-enough approximation of "average
+    // combined opportunity" that avoids needing a harder per-game join, fine for a
+    // heuristic signal rather than strict accounting.
+    public record Mapping(
+        string[] StatCategories, string DisplayCategory, string Keyword, string Label, string[] Exclude,
+        (string Category, string Keyword)[]? OpportunityComponents = null, string? OpportunityLabel = null,
+        decimal? OpportunityMinAvg = null);
 
     // Rate / split / per-play stats that share a keyword with the counting stat we want.
     private static readonly string[] RateNoise =
@@ -29,25 +48,42 @@ public static class PropMarketMapping
     private static Mapping Single(string category, string keyword, string label, string[] exclude) =>
         new([category], category, keyword, label, exclude);
 
+    private static Mapping WithOpportunity(
+        string category, string keyword, string label, string[] exclude,
+        string opportunityCategory, string opportunityKeyword, string opportunityLabel, decimal opportunityMinAvg) =>
+        new([category], category, keyword, label, exclude,
+            [(opportunityCategory, opportunityKeyword)], opportunityLabel, opportunityMinAvg);
+
     private static readonly Dictionary<string, Mapping> Map = new()
     {
         ["player_pass_yds"]          = Single("Passing",   "yard",       "Passing Yards",    None),
         ["player_pass_tds"]          = Single("Passing",   "touchdown",  "Passing TDs",       None),
         ["player_pass_completions"]  = Single("Passing",   "completion", "Completions",       RateNoise),
-        ["player_rush_yds"]          = Single("Rushing",   "yard",       "Rushing Yards",     None),
+        ["player_rush_yds"]          = WithOpportunity("Rushing", "yard", "Rushing Yards", None,
+                                            "Rushing", "attempt", "rush att/gm", 8m),
         ["player_rush_attempts"]     = Single("Rushing",   "attempt",    "Rushing Attempts",  RateNoise),
-        ["player_rush_longest"]      = Single("Rushing",   "long",       "Longest Rush",      None),
-        ["player_reception_yds"]     = Single("Receiving", "yard",       "Receiving Yards",   None),
-        ["player_receptions"]        = Single("Receiving", "reception",  "Receptions",        RateNoise),
-        ["player_reception_longest"] = Single("Receiving", "long",       "Longest Reception", None),
+        ["player_rush_longest"]      = WithOpportunity("Rushing", "long", "Longest Rush", None,
+                                            "Rushing", "attempt", "rush att/gm", 8m),
+        ["player_reception_yds"]     = WithOpportunity("Receiving", "yard", "Receiving Yards", None,
+                                            "Receiving", "target", "targets/gm", 4m),
+        ["player_receptions"]        = WithOpportunity("Receiving", "reception", "Receptions", RateNoise,
+                                            "Receiving", "target", "targets/gm", 4m),
+        ["player_reception_longest"] = WithOpportunity("Receiving", "long", "Longest Reception", None,
+                                            "Receiving", "target", "targets/gm", 4m),
         ["player_sacks"]             = Single("Defense",   "sack",       "Sacks",             None),
         ["player_solo_tackles"]      = Single("Defense",   "solo",       "Solo Tackles",      None),
 
         // Single-sided "does this player score a TD" market — no Under, no real line from
         // the sportsbook (see NflSyncOrchestrator, which stores it as Over 0.5). A TD can
         // come from either rushing or receiving, so this is the one market that spans two
-        // stat categories instead of one.
-        ["player_anytime_td"] = new(["Rushing", "Receiving"], "Touchdowns", "touchdown", "Anytime TD", None),
+        // stat categories instead of one. Opportunity = rush attempts + targets combined,
+        // since either pathway can produce the score — this is the market most exposed to
+        // the "100% from 2 games" small-sample trap (a binary per-game outcome, not a
+        // yardage total), so it needs this check more than most, even though a single
+        // combined-opportunity threshold is necessarily a rough fit across very different
+        // player types (a mobile QB's and a bell-cow RB's baselines don't look alike).
+        ["player_anytime_td"] = new(["Rushing", "Receiving"], "Touchdowns", "touchdown", "Anytime TD", None,
+            [("Rushing", "attempt"), ("Receiving", "target")], "rush att + tgt/gm", 6m),
     };
 
     // Fixed display order for the category tabs — anything unmapped falls under "Other".

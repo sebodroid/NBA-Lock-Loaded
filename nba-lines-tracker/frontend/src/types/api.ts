@@ -63,6 +63,8 @@ export interface TeamSeasonStats {
   ouOvers: number
   ouUnders: number
   ouPushes: number
+  avgPointsScored: number
+  avgPointsAllowed: number
 }
 
 export interface H2HGameEntry {
@@ -98,6 +100,14 @@ export interface TodayMatchupResponse {
   homeStats: TeamSeasonStats
   awayStats: TeamSeasonStats
   headToHead: H2HGameEntry[]
+  weather: GameWeatherSummary | null   // null for indoor/retractable-roof venues
+}
+
+export interface GameWeatherSummary {
+  temperatureF: number | null
+  windSpeed: string | null
+  precipitationChancePct: number | null
+  shortForecast: string | null
 }
 
 export interface LeaderboardEntryResponse {
@@ -139,6 +149,8 @@ export interface PropEstimate {
   estimatedHitRatePct: number | null
   recentGamesWithData: number       // last-5-games window, independent of statBasis
   recentHitRatePct: number | null
+  opportunityAvg: number | null     // targets/gm or rush att/gm — null when not tracked for this market
+  opportunityLabel: string | null
 }
 
 // "Questionable" | "Doubtful" | "Out" | "Injured Reserve" — null means not on the report.
@@ -238,6 +250,23 @@ export interface HotBetEntry {
   estimate: PropEstimate
   injuryStatus: InjuryStatus
   injuryNote: string | null
+}
+
+export interface ParlayLeg {
+  kind: 'PlayerProp' | 'Total'
+  description: string
+  gameId: number
+  gameLabel: string
+  confidencePct: number
+  odds: number
+  playerId: number | null
+  playerPropLineId: number | null
+}
+
+export interface ParlaySuggestion {
+  legs: ParlayLeg[]
+  combinedProbabilityPct: number
+  combinedOdds: number
 }
 
 // Derived computations (pushes excluded from denominator per user decision)

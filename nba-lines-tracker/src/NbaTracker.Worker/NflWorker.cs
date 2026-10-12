@@ -102,6 +102,7 @@ public class NflWorker : BackgroundService
         }
 
         await RunInjurySyncAsync(ct);
+        await RunWeatherSyncAsync(ct);
     }
 
     // Not date-scoped like everything else here — the injury report is a current
@@ -112,6 +113,15 @@ public class NflWorker : BackgroundService
         using var scope = _scopeFactory.CreateScope();
         var orchestrator = scope.ServiceProvider.GetRequiredService<NflSyncOrchestrator>();
         await orchestrator.SyncInjuriesAsync(ct);
+    }
+
+    // Same reasoning as injuries — a forecast lookahead across the whole upcoming
+    // window, not tied to one date in the rolling loop.
+    private async Task RunWeatherSyncAsync(CancellationToken ct)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var orchestrator = scope.ServiceProvider.GetRequiredService<NflSyncOrchestrator>();
+        await orchestrator.SyncWeatherAsync(ct);
     }
 
     private async Task RunGapDetectionAsync(CancellationToken ct)

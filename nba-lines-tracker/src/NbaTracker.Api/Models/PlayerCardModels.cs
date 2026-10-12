@@ -37,7 +37,14 @@ public record PropEstimate(
     // average can't see a role change, an injury return, or a defense's adjustment, so
     // this is shown alongside it rather than replacing it.
     int RecentGamesWithData,
-    decimal? RecentHitRatePct
+    decimal? RecentHitRatePct,
+
+    // Opportunity/usage signal (targets for receiving props, rush attempts for rushing
+    // yardage/longest props) — null when not tracked for this market. See
+    // PropMarketMapping for why this exists: a hit rate built on real volume is a more
+    // repeatable edge than one built on an efficient outlier game.
+    decimal? OpportunityAvg,
+    string? OpportunityLabel
 );
 
 public record PlayerCardResponse(
