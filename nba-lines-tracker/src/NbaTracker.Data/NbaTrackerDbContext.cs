@@ -14,6 +14,7 @@ public class NbaTrackerDbContext : DbContext
     public DbSet<GameResult> GameResults => Set<GameResult>();
     public DbSet<User> Users => Set<User>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+    public DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
     public DbSet<SyncRun> SyncRuns => Set<SyncRun>();
     public DbSet<Player> Players => Set<Player>();
     public DbSet<PlayerGameStat> PlayerGameStats => Set<PlayerGameStat>();
@@ -75,6 +76,16 @@ public class NbaTrackerDbContext : DbContext
             .IsUnique();        modelBuilder.Entity<RefreshToken>()
             .HasIndex(r => r.TokenHash)
             .IsUnique();
+
+        modelBuilder.Entity<PasswordResetToken>()
+            .HasIndex(r => r.TokenHash)
+            .IsUnique();
+
+        modelBuilder.Entity<PasswordResetToken>()
+            .HasOne(r => r.User)
+            .WithMany()
+            .HasForeignKey(r => r.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
 
         modelBuilder.Entity<User>()
             .HasIndex(u => u.Email)

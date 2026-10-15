@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { createBrowserRouter, RouterProvider, Navigate, Outlet, useParams } from 'react-router-dom'
 import { LoginPage } from '@/components/auth/LoginPage'
 import { RegisterPage } from '@/components/auth/RegisterPage'
+import { ForgotPasswordPage } from '@/components/auth/ForgotPasswordPage'
+import { ResetPasswordPage } from '@/components/auth/ResetPasswordPage'
 import { MainPage } from '@/components/layout/MainPage'
 import { useAppStore } from '@/store/useAppStore'
 import { tryRestoreSession } from '@/api/auth'
@@ -37,6 +39,8 @@ const router = createBrowserRouter([
     children: [
       { path: '/login', element: <LoginPage /> },
       { path: '/register', element: <RegisterPage /> },
+      { path: '/forgot-password', element: <ForgotPasswordPage /> },
+      { path: '/reset-password', element: <ResetPasswordPage /> },
     ],
   },
 ])

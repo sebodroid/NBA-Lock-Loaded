@@ -14,6 +14,14 @@ export async function register(email: string, username: string, password: string
   await axios.post(`${apiBaseUrl}/api/auth/register`, { email, username, password })
 }
 
+export async function forgotPassword(email: string): Promise<void> {
+  await axios.post(`${apiBaseUrl}/api/auth/forgot-password`, { email })
+}
+
+export async function resetPassword(token: string, newPassword: string): Promise<void> {
+  await axios.post(`${apiBaseUrl}/api/auth/reset-password`, { token, newPassword })
+}
+
 export async function logout(): Promise<void> {
   const refreshToken = localStorage.getItem('refreshToken')
   if (refreshToken) {
