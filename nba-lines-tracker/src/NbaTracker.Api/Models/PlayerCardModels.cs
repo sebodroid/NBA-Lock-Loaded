@@ -27,6 +27,13 @@ public record PropEstimate(
     decimal? OpponentAllowedAverage,
     decimal? LeagueAllowedAverage,
 
+    // Opponent's rank among all teams with data in this exact stat, 1 = allows the
+    // fewest (toughest defense), TeamsRanked = allows the most (easiest matchup).
+    // Derived from the same per-team allowed averages as OpponentAllowedAverage, just
+    // ordered — gives "ranked 26th of 32" language instead of a bare average.
+    int? OpponentDefensiveRank,
+    int? TeamsRanked,
+
     // Player's hit rate against a line adjusted for this specific opponent's tendency
     // in this stat, relative to league average. Not a statistical probability — an
     // explainable heuristic: how often would he have cleared a bar shifted by the same
