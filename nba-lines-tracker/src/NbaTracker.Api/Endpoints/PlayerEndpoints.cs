@@ -80,7 +80,7 @@ public static class PlayerEndpoints
         var seasonStats = seasonRows
             .Where(s => s.Value.HasValue)
             .GroupBy(s => s.StatName)
-            .ToDictionary(g => g.Key, g => g.Sum(s => s.Value!.Value));
+            .ToDictionary(g => g.Key, g => AggregateStatTotal(g.Key, g.Select(s => s.Value!.Value)));
 
         var propLines = await db.PlayerPropLines
             .Include(l => l.Game)
@@ -112,7 +112,11 @@ public static class PlayerEndpoints
     // Reusable per-market league context: what every team allows in a stat category,
     // computed once and shared across every prop line that asks about the same market —
     // see BuildPropEstimateAsync's leagueCache parameter for why this exists.
-    internal record LeagueAllowedContext(Dictionary<int, List<decimal>> AllowedByTeam, decimal? LeagueAllowedAverage);
+    internal record LeagueAllowedContext(
+        Dictionary<int, List<decimal>> AllowedByTeam,
+        decimal? LeagueAllowedAverage,
+        Dictionary<int, int> RankByTeam,   // teamId -> 1 (fewest allowed) .. TeamsRanked (most allowed)
+        int TeamsRanked);
 
     // Internal, not private — GameEndpoints reuses this to list every prop for a game
     // (the "which players have props tonight" view), not just one player's own card.
@@ -161,7 +165,7 @@ public static class PlayerEndpoints
             return new PropEstimate(
                 line.Id, line.MarketKey, label, category, line.Line, line.OverOdds, line.UnderOdds,
                 line.Bookmaker, line.UnderBookmaker, opponentTeam?.Abbreviation ?? "?", "current",
-                0, null, 0, null, null, null, null, 0, null, null, null);
+                0, null, 0, null, null, null, null, null, null, 0, null, null, null);
         }
 
         var keyword = mapping.Keyword.ToLower();
@@ -255,7 +259,7 @@ public static class PlayerEndpoints
             return new PropEstimate(
                 line.Id, line.MarketKey, label, category, line.Line, line.OverOdds, line.UnderOdds,
                 line.Bookmaker, line.UnderBookmaker, "?", statBasis,
-                gamesWithData, seasonAverage, hitCount, hitRatePct, null, null, null,
+                gamesWithData, seasonAverage, hitCount, hitRatePct, null, null, null, null, null,
                 recentGamesWithData, recentHitRatePct, opportunityAvg, mapping.OpportunityLabel);
         }
 
@@ -282,6 +286,10 @@ public static class PlayerEndpoints
         decimal? opponentAllowedAverage = opponentAllowedGames.Count > 0
             ? opponentAllowedGames.Average()
             : null;
+        int? opponentDefensiveRank = leagueCtx.RankByTeam.TryGetValue(opponentTeamId!.Value, out var rank)
+            ? rank
+            : null;
+        int? teamsRanked = leagueCtx.TeamsRanked > 0 ? leagueCtx.TeamsRanked : null;
 
         decimal? estimatedHitRatePct = null;
         if (gamesWithData >= MinGamesForEstimate
@@ -298,7 +306,7 @@ public static class PlayerEndpoints
             line.Id, line.MarketKey, label, category, line.Line, line.OverOdds, line.UnderOdds,
             line.Bookmaker, line.UnderBookmaker, opponentTeam.Abbreviation, statBasis,
             gamesWithData, seasonAverage, hitCount, hitRatePct,
-            opponentAllowedAverage, leagueAllowedAverage, estimatedHitRatePct,
+            opponentAllowedAverage, leagueAllowedAverage, opponentDefensiveRank, teamsRanked, estimatedHitRatePct,
             recentGamesWithData, recentHitRatePct, opportunityAvg, mapping.OpportunityLabel);
     }
 
@@ -341,8 +349,27 @@ public static class PlayerEndpoints
             ? allowedPerTeamGame.Average(x => x.Allowed)
             : null;
 
-        return new LeagueAllowedContext(allowedByTeam, leagueAllowedAverage);
+        // Rank 1 = fewest allowed (toughest defense) .. N = most allowed (easiest matchup),
+        // ordered by each team's own average across its games in allowedByTeam.
+        var rankByTeam = allowedByTeam
+            .Select(kv => new { TeamId = kv.Key, Average = kv.Value.Average() })
+            .OrderBy(x => x.Average)
+            .Select((x, i) => new { x.TeamId, Rank = i + 1 })
+            .ToDictionary(x => x.TeamId, x => x.Rank);
+
+        return new LeagueAllowedContext(allowedByTeam, leagueAllowedAverage, rankByTeam, rankByTeam.Count);
     }
+
+    // Season total for one stat across games. Most Highlightly stat names are counting
+    // stats (yards, completions, TDs) where a season figure means "add every game up" —
+    // but a handful are already per-game rates (Passer Rating, QB Rating) where summing
+    // across games produces nonsense (e.g. a "404" season passer rating). Those are
+    // detected by name and averaged instead. Matched by substring like the rest of this
+    // file's stat lookups, since Highlightly's exact vocabulary isn't pinned down anywhere.
+    private static decimal AggregateStatTotal(string statName, IEnumerable<decimal> values)
+        => statName.Contains("rating", StringComparison.OrdinalIgnoreCase)
+            ? Math.Round(values.Average(), 1)
+            : values.Sum();
 
     // Per-game values for a stat query: one number per game, taking the largest matching
     // entry when a game has several (see BuildPropEstimateAsync for why largest wins).
@@ -401,7 +428,7 @@ public static class PlayerEndpoints
                 var statTotals = g
                     .Where(s => s.Value.HasValue)
                     .GroupBy(s => s.StatName)
-                    .ToDictionary(sg => sg.Key, sg => sg.Sum(s => s.Value!.Value));
+                    .ToDictionary(sg => sg.Key, sg => AggregateStatTotal(sg.Key, sg.Select(s => s.Value!.Value)));
 
                 return new LeaderboardEntryResponse(
                     player.Id,

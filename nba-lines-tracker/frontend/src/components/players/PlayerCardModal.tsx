@@ -96,7 +96,14 @@ function PropCard({ prop }: { prop: PropEstimate }) {
               <div>
                 <p className="text-xs text-muted-foreground">Opponent context</p>
                 <p>
-                  {prop.opponentAbbreviation} allows{' '}
+                  {prop.opponentAbbreviation}
+                  {prop.opponentDefensiveRank !== null && prop.teamsRanked !== null && (
+                    <>
+                      {' '}is ranked <span className="font-medium">{prop.opponentDefensiveRank}</span> of{' '}
+                      {prop.teamsRanked} in {prop.marketLabel.toLowerCase()} allowed —
+                    </>
+                  )}
+                  {' '}allows{' '}
                   <span className="font-medium">{prop.opponentAllowedAverage?.toFixed(1)}</span> per game
                   vs. a league average of {prop.leagueAllowedAverage?.toFixed(1)} —{' '}
                   {prop.opponentAllowedAverage! > prop.leagueAllowedAverage!

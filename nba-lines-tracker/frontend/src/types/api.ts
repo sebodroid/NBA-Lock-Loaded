@@ -153,6 +153,8 @@ export interface PropEstimate {
   hitRatePct: number | null
   opponentAllowedAverage: number | null
   leagueAllowedAverage: number | null
+  opponentDefensiveRank: number | null   // 1 = allows the fewest (toughest defense) in this stat
+  teamsRanked: number | null             // how many teams opponentDefensiveRank is out of
   estimatedHitRatePct: number | null
   recentGamesWithData: number       // last-5-games window, independent of statBasis
   recentHitRatePct: number | null

@@ -26,6 +26,9 @@ builder.Services.AddScoped<TokenService>();
 // AiPreviewService — scoped to match DbContext lifetime
 builder.Services.AddScoped<AiPreviewService>();
 
+// EmailService — sends password-reset emails
+builder.Services.AddScoped<EmailService>();
+
 // JWT bearer authentication
 // ASP.NET Core maps env var JWT__Secret -> config key JWT:Secret via __ separator
 var jwtSecret = builder.Configuration["JWT:Secret"]
@@ -65,7 +68,21 @@ builder.Services.AddOpenApi();
 
 var app = builder.Build();
 
-// Apply migrations and seed admin in development
+// Apply migrations on every startup, in every environment — this app has no separate
+// migration step in CI/CD, so the API container applying its own pending migrations on
+// boot is the only thing that ever rolls schema changes out to the production database.
+try
+{
+    using var migrationScope = app.Services.CreateScope();
+    var migrationDb = migrationScope.ServiceProvider.GetRequiredService<NbaTrackerDbContext>();
+    await migrationDb.Database.MigrateAsync();
+}
+catch (Exception ex)
+{
+    app.Logger.LogWarning(ex, "Migration error at startup");
+}
+
+// Seed admin in development
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
@@ -74,7 +91,6 @@ if (app.Environment.IsDevelopment())
     {
         using var scope = app.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<NbaTrackerDbContext>();
-        await db.Database.MigrateAsync();
 
         // Seed admin user from env vars — safe to run every startup (AnyAsync guard)
         // ASP.NET Core maps env var Seed__AdminEmail -> config key Seed:AdminEmail via __ separator

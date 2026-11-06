@@ -78,7 +78,9 @@ export function HotBetsPage() {
 
                   <p className="text-xs text-muted-foreground">
                     Hit in {e.hitCount} of {e.gamesWithData} games vs {e.opponentAbbreviation}
-                    {e.estimatedHitRatePct !== null ? ' (opponent-adjusted)' : ''}
+                    {e.opponentDefensiveRank !== null && e.teamsRanked !== null
+                      ? ` (ranked ${e.opponentDefensiveRank} of ${e.teamsRanked} vs. this stat)`
+                      : e.estimatedHitRatePct !== null ? ' (opponent-adjusted)' : ''}
                   </p>
 
                   {e.recentGamesWithData > 0 && (

@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using Microsoft.EntityFrameworkCore;
 using NbaTracker.Api.Models;
 using NbaTracker.Api.Services;
@@ -14,6 +15,8 @@ public static class AuthEndpoints
         group.MapPost("/register", RegisterAsync);
         group.MapPost("/refresh", RefreshAsync);
         group.MapPost("/logout", LogoutAsync).RequireAuthorization();
+        group.MapPost("/forgot-password", ForgotPasswordAsync);
+        group.MapPost("/reset-password", ResetPasswordAsync);
     }
 
     private static async Task<IResult> LoginAsync(
@@ -148,5 +151,82 @@ public static class AuthEndpoints
 
         // Always return 200 — logout is idempotent (already-revoked token is not an error)
         return Results.Ok();
+    }
+
+    // POST /api/auth/forgot-password — always returns the same generic 200, whether or
+    // not the email matches an account, so this endpoint can't be used to enumerate
+    // which emails have accounts.
+    private static async Task<IResult> ForgotPasswordAsync(
+        ForgotPasswordRequest req,
+        NbaTrackerDbContext db,
+        EmailService email,
+        IConfiguration config,
+        CancellationToken ct)
+    {
+        var user = await db.Users.FirstOrDefaultAsync(u => u.Email == req.Email, ct);
+        if (user is not null)
+        {
+            var plaintext = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
+
+            db.PasswordResetTokens.Add(new PasswordResetToken
+            {
+                UserId = user.Id,
+                TokenHash = BCrypt.Net.BCrypt.HashPassword(plaintext),
+                ExpiresAt = DateTime.UtcNow.AddHours(1),
+                CreatedAt = DateTime.UtcNow
+            });
+            await db.SaveChangesAsync(ct);
+
+            var baseUrl = (config["Frontend:BaseUrl"] ?? "").TrimEnd('/');
+            var resetUrl = $"{baseUrl}/reset-password?token={Uri.EscapeDataString(plaintext)}";
+
+            try
+            {
+                await email.SendPasswordResetEmailAsync(user.Email, resetUrl, ct);
+            }
+            catch
+            {
+                // Don't leak email-delivery failures to the caller — would reveal whether
+                // the account exists just as surely as a different status code would.
+            }
+        }
+
+        return Results.Ok(new { message = "If that email has an account, a reset link has been sent." });
+    }
+
+    private static async Task<IResult> ResetPasswordAsync(
+        ResetPasswordRequest req,
+        NbaTrackerDbContext db,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(req.NewPassword) || req.NewPassword.Length < 8)
+            return Results.BadRequest(new { error = "Password must be at least 8 characters." });
+
+        // Cannot query by BCrypt hash — fetch unused/unexpired candidates, verify in memory
+        var candidates = await db.PasswordResetTokens
+            .Include(t => t.User)
+            .Where(t => t.ExpiresAt > DateTime.UtcNow && t.UsedAt == null)
+            .ToListAsync(ct);
+
+        var match = candidates.FirstOrDefault(t =>
+            BCrypt.Net.BCrypt.Verify(req.Token, t.TokenHash));
+
+        if (match is null)
+            return Results.BadRequest(new { error = "This reset link is invalid or has expired." });
+
+        match.UsedAt = DateTime.UtcNow;
+        match.User.PasswordHash = BCrypt.Net.BCrypt.HashPassword(req.NewPassword);
+
+        // Revoke every existing refresh token — a password reset should sign the account
+        // out everywhere, not just leave old sessions valid under the new password.
+        var activeRefreshTokens = await db.RefreshTokens
+            .Where(rt => rt.UserId == match.UserId && rt.RevokedAt == null)
+            .ToListAsync(ct);
+        foreach (var rt in activeRefreshTokens)
+            rt.RevokedAt = DateTime.UtcNow;
+
+        await db.SaveChangesAsync(ct);
+
+        return Results.Ok(new { message = "Password has been reset." });
     }
 }

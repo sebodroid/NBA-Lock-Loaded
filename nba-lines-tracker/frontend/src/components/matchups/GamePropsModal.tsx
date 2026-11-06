@@ -200,6 +200,9 @@ export function GamePropsModal() {
                               <td
                                 className="py-1.5 text-right tabular-nums whitespace-nowrap"
                                 title={[
+                                  e.opponentDefensiveRank !== null && e.teamsRanked !== null
+                                    ? `Opponent ranked ${e.opponentDefensiveRank} of ${e.teamsRanked} vs. this stat`
+                                    : null,
                                   e.recentGamesWithData > 0 ? `Last ${e.recentGamesWithData}: ${e.recentHitRatePct}% over` : null,
                                   e.opportunityAvg !== null ? `${e.opportunityAvg} ${e.opportunityLabel}` : null,
                                 ].filter(Boolean).join(' · ') || undefined}
