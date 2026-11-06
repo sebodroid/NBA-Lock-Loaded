@@ -22,6 +22,8 @@ public class NbaTrackerDbContext : DbContext
     public DbSet<Bet> Bets => Set<Bet>();
     public DbSet<PlayerInjuryStatus> PlayerInjuryStatuses => Set<PlayerInjuryStatus>();
     public DbSet<GameWeatherForecast> GameWeatherForecasts => Set<GameWeatherForecast>();
+    public DbSet<PredictionSnapshot> PredictionSnapshots => Set<PredictionSnapshot>();
+    public DbSet<PlayerPropLineHistory> PlayerPropLineHistories => Set<PlayerPropLineHistory>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -226,5 +228,41 @@ public class NbaTrackerDbContext : DbContext
         modelBuilder.Entity<GameWeatherForecast>()
             .HasIndex(w => w.GameId)
             .IsUnique();
+
+        // PredictionSnapshot — one row per (Game, Player, Market) the first time it ever
+        // qualified as a Hot Bet; the unique index is what makes the upsert idempotent
+        // (insert-if-missing, never updated after)
+        modelBuilder.Entity<PredictionSnapshot>()
+            .HasOne(p => p.Game)
+            .WithMany()
+            .HasForeignKey(p => p.GameId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<PredictionSnapshot>()
+            .HasOne(p => p.Player)
+            .WithMany()
+            .HasForeignKey(p => p.PlayerId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<PredictionSnapshot>()
+            .HasIndex(p => new { p.GameId, p.PlayerId, p.MarketKey })
+            .IsUnique();
+
+        // PlayerPropLineHistory — append-only, NOT unique on (GameId, PlayerId, MarketKey):
+        // the whole point is multiple rows per prop over time, one per sync pass.
+        modelBuilder.Entity<PlayerPropLineHistory>()
+            .HasOne(h => h.Game)
+            .WithMany()
+            .HasForeignKey(h => h.GameId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<PlayerPropLineHistory>()
+            .HasOne(h => h.Player)
+            .WithMany()
+            .HasForeignKey(h => h.PlayerId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<PlayerPropLineHistory>()
+            .HasIndex(h => new { h.GameId, h.PlayerId, h.MarketKey, h.RecordedAt });
     }
 }

@@ -470,6 +470,93 @@ namespace NbaTracker.Data.Migrations
                     b.ToTable("PlayerPropLines");
                 });
 
+            modelBuilder.Entity("NbaTracker.Data.Entities.PlayerPropLineHistory", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Bookmaker")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("GameId")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("Line")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("MarketKey")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int?>("OverOdds")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("PlayerId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("RecordedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UnderBookmaker")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("UnderOdds")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PlayerId");
+
+                    b.HasIndex("GameId", "PlayerId", "MarketKey", "RecordedAt");
+
+                    b.ToTable("PlayerPropLineHistories");
+                });
+
+            modelBuilder.Entity("NbaTracker.Data.Entities.PredictionSnapshot", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("ConfidencePct")
+                        .HasColumnType("numeric");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("GameId")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("Line")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("MarketKey")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("PlayerId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Sport")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PlayerId");
+
+                    b.HasIndex("GameId", "PlayerId", "MarketKey")
+                        .IsUnique();
+
+                    b.ToTable("PredictionSnapshots");
+                });
+
             modelBuilder.Entity("NbaTracker.Data.Entities.RefreshToken", b =>
                 {
                     b.Property<int>("Id")
@@ -777,6 +864,44 @@ namespace NbaTracker.Data.Migrations
                 });
 
             modelBuilder.Entity("NbaTracker.Data.Entities.PlayerPropLine", b =>
+                {
+                    b.HasOne("NbaTracker.Data.Entities.Game", "Game")
+                        .WithMany()
+                        .HasForeignKey("GameId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("NbaTracker.Data.Entities.Player", "Player")
+                        .WithMany()
+                        .HasForeignKey("PlayerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Game");
+
+                    b.Navigation("Player");
+                });
+
+            modelBuilder.Entity("NbaTracker.Data.Entities.PlayerPropLineHistory", b =>
+                {
+                    b.HasOne("NbaTracker.Data.Entities.Game", "Game")
+                        .WithMany()
+                        .HasForeignKey("GameId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("NbaTracker.Data.Entities.Player", "Player")
+                        .WithMany()
+                        .HasForeignKey("PlayerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Game");
+
+                    b.Navigation("Player");
+                });
+
+            modelBuilder.Entity("NbaTracker.Data.Entities.PredictionSnapshot", b =>
                 {
                     b.HasOne("NbaTracker.Data.Entities.Game", "Game")
                         .WithMany()

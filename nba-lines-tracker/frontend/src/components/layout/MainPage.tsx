@@ -16,6 +16,7 @@ import { HotBetsPage } from '@/components/bets/HotBetsPage'
 import { ParlaysPage } from '@/components/bets/ParlaysPage'
 import { AdminPage } from '@/components/admin/AdminPage'
 import { CustomLinePage } from '@/components/bets/CustomLinePage'
+import { AccuracyPage } from '@/components/bets/AccuracyPage'
 import { PaletteMenu } from '@/components/layout/PaletteMenu'
 import { useAppStore } from '@/store/useAppStore'
 import { useTeams } from '@/api/teams'
@@ -29,6 +30,7 @@ const VIEWS = [
   { key: 'hot', label: 'Hot Bets' },
   { key: 'parlays', label: 'Parlays' },
   { key: 'custom', label: 'Check a Line' },
+  { key: 'accuracy', label: 'Accuracy' },
   { key: 'admin', label: 'Admin' },
 ] as const
 type View = typeof VIEWS[number]['key']
@@ -162,6 +164,7 @@ export function MainPage() {
         {view === 'hot' && <HotBetsPage />}
         {view === 'parlays' && <ParlaysPage />}
         {view === 'custom' && <CustomLinePage />}
+        {view === 'accuracy' && <AccuracyPage />}
         {view === 'admin' && isAdmin && <AdminPage />}
       </main>
 

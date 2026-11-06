@@ -146,4 +146,7 @@ ParlayEndpoints.Map(api.MapGroup("/{sport}/parlays").RequireAuthorization());
 // Custom line confidence checker — sport-scoped, any authenticated user
 CustomLineEndpoints.Map(api.MapGroup("/{sport}/custom-line").RequireAuthorization());
 
+// Accuracy tracker — sport-scoped, any authenticated user
+AccuracyEndpoints.Map(api.MapGroup("/{sport}/accuracy").RequireAuthorization());
+
 app.Run();

@@ -520,6 +520,24 @@ public class NflSyncOrchestrator
                     existing.LineTimestamp  = DateTime.UtcNow;
                     existing.UpdatedAt      = DateTime.UtcNow;
                 }
+
+                // Append-only snapshot, every sync pass, whether or not the line actually
+                // moved — see PlayerPropLineHistory for why. Deliberately NOT deduped
+                // against "did it change" — simpler, and a run of identical values is
+                // itself a useful signal (a line sitting completely still all week reads
+                // differently than one that moved and settled back).
+                _db.PlayerPropLineHistories.Add(new PlayerPropLineHistory
+                {
+                    GameId         = game.Id,
+                    PlayerId       = player.Id,
+                    MarketKey      = marketKey,
+                    Line           = line,
+                    OverOdds       = (int)Math.Round(over.Outcome.Price),
+                    UnderOdds      = under is not null ? (int)Math.Round(under.Value.Outcome.Price) : null,
+                    Bookmaker      = over.BookKey,
+                    UnderBookmaker = under?.BookKey,
+                    RecordedAt     = DateTime.UtcNow
+                });
             }
         }
 

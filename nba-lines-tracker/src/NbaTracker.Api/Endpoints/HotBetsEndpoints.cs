@@ -122,9 +122,51 @@ public static class HotBetsEndpoints
             ));
         }
 
+        await SnapshotNewCandidatesAsync(sport, candidates, db, ct);
+
         return candidates
             .OrderByDescending(c => c.Estimate.EstimatedHitRatePct ?? c.Estimate.HitRatePct)
             .ThenByDescending(c => c.Estimate.GamesWithData)
             .ToList();
+    }
+
+    // Records the FIRST time each (Game, Player, Market) ever qualified as a Hot Bet —
+    // see PredictionSnapshot for why this matters. Idempotent: the unique index means a
+    // candidate that already has a snapshot from an earlier request this week is simply
+    // left alone, never overwritten with a later (possibly different) confidence number.
+    // Every qualifying candidate gets snapshotted here, not just the top N a caller ends
+    // up showing — the accuracy tracker should see the whole qualifying pool, not an
+    // arbitrarily limited slice of it.
+    private static async Task SnapshotNewCandidatesAsync(
+        string sport, List<HotBetEntry> candidates, NbaTrackerDbContext db, CancellationToken ct)
+    {
+        if (candidates.Count == 0) return;
+
+        var gameIds = candidates.Select(c => c.GameId).Distinct().ToList();
+        var existingKeys = await db.PredictionSnapshots
+            .Where(p => gameIds.Contains(p.GameId))
+            .Select(p => new { p.GameId, p.PlayerId, p.MarketKey })
+            .ToListAsync(ct);
+        var existing = existingKeys.Select(k => (k.GameId, k.PlayerId, k.MarketKey)).ToHashSet();
+
+        foreach (var c in candidates)
+        {
+            var key = (c.GameId, c.PlayerId, c.Estimate.MarketKey);
+            if (existing.Contains(key)) continue;
+
+            db.PredictionSnapshots.Add(new PredictionSnapshot
+            {
+                Sport = sport,
+                GameId = c.GameId,
+                PlayerId = c.PlayerId,
+                MarketKey = c.Estimate.MarketKey,
+                Line = c.Estimate.Line,
+                ConfidencePct = c.Estimate.EstimatedHitRatePct ?? c.Estimate.HitRatePct ?? 0m,
+                CreatedAt = DateTime.UtcNow
+            });
+            existing.Add(key);   // guards against duplicate candidates within this same batch
+        }
+
+        await db.SaveChangesAsync(ct);
     }
 }
