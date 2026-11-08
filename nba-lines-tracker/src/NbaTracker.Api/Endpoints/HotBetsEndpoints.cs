@@ -126,45 +126,71 @@ public static class HotBetsEndpoints
                 line.Player, line, statsStart, db, ct, teamsById, leagueCache, statsCache);
             if (estimate.GamesWithData < PlayerEndpoints.MinGamesForEstimate) continue;
 
-            var pct = estimate.EstimatedHitRatePct ?? estimate.HitRatePct;
-            if (pct is null || pct < MinHitRatePct) continue;
+            var overPct = estimate.EstimatedHitRatePct ?? estimate.HitRatePct;
+            var overHits = estimate.EstimatedHitCount ?? estimate.HitCount;
 
-            // Veto: looks good on paper, but has gone cold recently — don't recommend it.
-            if (estimate.RecentGamesWithData >= MinRecentGamesForVeto
-                && estimate.RecentHitRatePct is not null
-                && estimate.RecentHitRatePct < RecentFormVetoPct) continue;
+            // Builds a candidate for one side, applying that side's own vetoes — returns
+            // null if this line doesn't qualify on that side at all. Over and Under read
+            // the SAME underlying history in opposite directions, so a veto that makes
+            // sense for one is often backwards for the other, not just a mirror of it.
+            HotBetEntry? BuildEntry(string side)
+            {
+                var isOver = side == "Over";
+                decimal? pct = isOver ? overPct : overPct is decimal op ? 100m - op : null;
+                if (pct is null || pct < MinHitRatePct) return null;
 
-            // Veto: a high hit rate built on thin volume isn't a repeatable edge — see
-            // PropMarketMapping's Opportunity* fields. Not every market tracks this
-            // (OpportunityMinAvg is null for most), so this only fires where it applies.
-            var opportunityFloor = PropMarketMapping.TryGetMapping(line.MarketKey)?.OpportunityMinAvg;
-            if (opportunityFloor is not null
-                && estimate.OpportunityAvg is not null
-                && estimate.OpportunityAvg < opportunityFloor) continue;
+                if (estimate.RecentGamesWithData >= MinRecentGamesForVeto
+                    && estimate.RecentHitRatePct is decimal recentPct)
+                {
+                    // Over: vetoed by going cold (recent rate too low). Under: vetoed by
+                    // going hot (recent rate too high) — the same signal read backwards.
+                    if (isOver && recentPct < RecentFormVetoPct) return null;
+                    if (!isOver && recentPct > 100m - RecentFormVetoPct) return null;
+                }
 
-            var entry = new HotBetEntry(
-                line.Player.Id,
-                line.Player.Name,
-                line.Player.Team?.Abbreviation,
-                line.Game.Id,
-                $"{line.Game.AwayTeam.Abbreviation} @ {line.Game.HomeTeam.Abbreviation}",
-                line.Game.GameDate.ToString("yyyy-MM-dd"),
-                estimate,
-                injury.Status,
-                injury.Note
-            );
+                // Opportunity veto only applies to Over — "low volume undermines a
+                // repeatable edge" doesn't invert cleanly into "low volume supports an
+                // Under" without real calibration against graded Under outcomes, which
+                // doesn't exist yet. No veto is applied here rather than guessing one.
+                if (isOver)
+                {
+                    var opportunityFloor = PropMarketMapping.TryGetMapping(line.MarketKey)?.OpportunityMinAvg;
+                    if (opportunityFloor is not null
+                        && estimate.OpportunityAvg is not null
+                        && estimate.OpportunityAvg < opportunityFloor) return null;
+                }
 
-            // Confidence, not the raw point estimate, decides which bucket a prop lands
+                var hits = isOver ? overHits : estimate.GamesWithData - overHits;
+                var confidence = WilsonLowerBoundPct(hits, estimate.GamesWithData);
+
+                return new HotBetEntry(
+                    line.Player.Id,
+                    line.Player.Name,
+                    line.Player.Team?.Abbreviation,
+                    line.Game.Id,
+                    $"{line.Game.AwayTeam.Abbreviation} @ {line.Game.HomeTeam.Abbreviation}",
+                    line.Game.GameDate.ToString("yyyy-MM-dd"),
+                    estimate,
+                    side,
+                    pct.Value,
+                    hits,
+                    confidence,
+                    injury.Status,
+                    injury.Note
+                );
+            }
+
+            // Confidence, not the raw point estimate, decides which bucket a side lands
             // in — a 2-for-2 record and a 6-for-8 record can show a similar or even
-            // identical percentage, but they aren't equally trustworthy. The Wilson lower
-            // bound discounts small samples automatically instead of needing a
-            // hand-picked games-played cutoff, and it's what "chance of hitting" implicitly
-            // promises: a number you can act on, not just "hasn't missed yet in a tiny
-            // sample." A pick that clears the point-estimate floor but not this bound still
-            // has real signal worth surfacing — it just goes to Developing, not dropped.
-            var hits = estimate.EstimatedHitCount ?? estimate.HitCount;
-            var confidence = WilsonLowerBoundPct(hits, estimate.GamesWithData);
-            (confidence >= MinHitRatePct ? confirmed : developing).Add(entry);
+            // identical percentage, but they aren't equally trustworthy. A pick that
+            // clears the point-estimate floor but not this bound still has real signal
+            // worth surfacing — it just goes to Developing, not dropped.
+            foreach (var side in new[] { "Over", "Under" })
+            {
+                var entry = BuildEntry(side);
+                if (entry is null) continue;
+                (entry.ConfidencePct >= MinHitRatePct ? confirmed : developing).Add(entry);
+            }
         }
 
         // Accuracy tracking only grades Confirmed picks — Developing is a UI-only surface
@@ -172,7 +198,7 @@ public static class HotBetsEndpoints
         await SnapshotNewCandidatesAsync(sport, confirmed, db, ct);
 
         List<HotBetEntry> RankedBy(List<HotBetEntry> list) => list
-            .OrderByDescending(c => WilsonLowerBoundPct(c.Estimate.EstimatedHitCount ?? c.Estimate.HitCount, c.Estimate.GamesWithData))
+            .OrderByDescending(c => c.ConfidencePct)
             .ThenByDescending(c => c.Estimate.GamesWithData)
             .ToList();
 
@@ -194,13 +220,14 @@ public static class HotBetsEndpoints
         var gameIds = candidates.Select(c => c.GameId).Distinct().ToList();
         var existingKeys = await db.PredictionSnapshots
             .Where(p => gameIds.Contains(p.GameId))
-            .Select(p => new { p.GameId, p.PlayerId, p.MarketKey })
+            .Select(p => new { p.GameId, p.PlayerId, p.MarketKey, p.Side })
             .ToListAsync(ct);
-        var existing = existingKeys.Select(k => (k.GameId, k.PlayerId, k.MarketKey)).ToHashSet();
+        var existing = existingKeys.Select(k => (k.GameId, k.PlayerId, k.MarketKey, k.Side)).ToHashSet();
 
         foreach (var c in candidates)
         {
-            var key = (c.GameId, c.PlayerId, c.Estimate.MarketKey);
+            var side = Enum.Parse<BetSide>(c.Side);
+            var key = (c.GameId, c.PlayerId, c.Estimate.MarketKey, side);
             if (existing.Contains(key)) continue;
 
             db.PredictionSnapshots.Add(new PredictionSnapshot
@@ -209,8 +236,9 @@ public static class HotBetsEndpoints
                 GameId = c.GameId,
                 PlayerId = c.PlayerId,
                 MarketKey = c.Estimate.MarketKey,
+                Side = side,
                 Line = c.Estimate.Line,
-                ConfidencePct = c.Estimate.EstimatedHitRatePct ?? c.Estimate.HitRatePct ?? 0m,
+                ConfidencePct = c.DisplayHitRatePct,
                 CreatedAt = DateTime.UtcNow
             });
             existing.Add(key);   // guards against duplicate candidates within this same batch

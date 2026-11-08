@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using NbaTracker.Api.Models;
 using NbaTracker.Data;
+using NbaTracker.Data.Entities;
 
 namespace NbaTracker.Api.Endpoints;
 
@@ -48,7 +49,8 @@ public static class AccuracyEndpoints
             if (actual is null) { pending++; continue; }   // shouldn't happen for a FINAL game, but don't guess
 
             graded++;
-            bool hit = actual > snap.Line;
+            bool over = actual > snap.Line;
+            bool hit = snap.Side == BetSide.Over ? over : !over;
             if (hit) hits++;
 
             var bucket = Buckets.FirstOrDefault(b => snap.ConfidencePct >= b.Lo && snap.ConfidencePct < b.Hi);

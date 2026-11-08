@@ -13,7 +13,9 @@ function americanOdds(v: number | null): string {
 
 function HotBetCard({ hb, developing }: { hb: HotBetEntry; developing: boolean }) {
   const e = hb.estimate
-  const pct = e.estimatedHitRatePct ?? e.hitRatePct
+  const isOver = hb.side === 'Over'
+  const odds = isOver ? e.overOdds : e.underOdds
+  const bookmaker = isOver ? e.bookmaker : (e.underBookmaker ?? e.bookmaker)
   const openPlayerCard = useAppStore(s => s.openPlayerCard)
   const openBetDraft = useAppStore(s => s.openBetDraft)
 
@@ -40,12 +42,12 @@ function HotBetCard({ hb, developing }: { hb: HotBetEntry; developing: boolean }
               ? 'bg-muted text-muted-foreground'
               : 'bg-gold/20 text-gold-foreground dark:text-gold'
           }`}>
-            {developing ? <TrendingUp className="h-3 w-3" /> : <Flame className="h-3 w-3" />} {pct}%
+            {developing ? <TrendingUp className="h-3 w-3" /> : <Flame className="h-3 w-3" />} {hb.displayHitRatePct}%
           </span>
         </div>
 
         <p className="text-sm">
-          {e.marketLabel} <span className="font-medium">Over {e.line}</span>
+          {e.marketLabel} <span className="font-medium">{hb.side} {e.line}</span>
           {e.statBasis === 'prior' && (
             <span className="ml-1.5 text-[10px] text-muted-foreground" title="Based on the 2025 season">
               2025
@@ -54,7 +56,7 @@ function HotBetCard({ hb, developing }: { hb: HotBetEntry; developing: boolean }
         </p>
 
         <p className="text-xs text-muted-foreground">
-          Hit in {e.hitCount} of {e.gamesWithData} games vs {e.opponentAbbreviation}
+          {isOver ? 'Hit' : 'Stayed under'} in {hb.displayHitCount} of {e.gamesWithData} games vs {e.opponentAbbreviation}
           {e.opponentDefensiveRank !== null && e.teamsRanked !== null
             ? ` (ranked ${e.opponentDefensiveRank} of ${e.teamsRanked} vs. this stat)`
             : e.estimatedHitRatePct !== null ? ' (opponent-adjusted)' : ''}
@@ -84,14 +86,14 @@ function HotBetCard({ hb, developing }: { hb: HotBetEntry; developing: boolean }
             gameId: hb.gameId,
             kind: 'PlayerProp',
             playerPropLineId: e.propLineId,
-            side: 'Over',
-            label: `${hb.playerName} — ${e.marketLabel} Over ${e.line}`,
-            oddsPreview: e.overOdds ?? -110,
+            side: hb.side,
+            label: `${hb.playerName} — ${e.marketLabel} ${hb.side} ${e.line}`,
+            oddsPreview: odds ?? -110,
           })}
-          title={`Best price via ${e.bookmaker}`}
+          title={`Best price via ${bookmaker}`}
           className="w-full rounded border px-2 py-1.5 text-xs font-medium hover:bg-accent"
         >
-          Bet Over {e.line} ({americanOdds(e.overOdds)}) <span className="capitalize text-muted-foreground">· {e.bookmaker}</span>
+          Bet {hb.side} {e.line} ({americanOdds(odds)}) <span className="capitalize text-muted-foreground">· {bookmaker}</span>
         </button>
       </CardContent>
     </Card>
@@ -106,11 +108,10 @@ export function HotBetsPage() {
   return (
     <div>
       <p className="text-sm text-muted-foreground mb-4">
-        The week's player props with the strongest estimated hit rate — always the{' '}
-        <span className="font-medium">Over</span>, since that's what the estimate measures.
-        Ranked by a confidence bound that discounts small samples, not the raw percentage —
-        a player who's cleared the line in their only 2 games won't outrank one who's cleared
-        it 6 of 8 times, even though both can show a high number.
+        The week's player props with the strongest estimated hit rate, Over or Under — whichever
+        side the data actually supports. Ranked by a confidence bound that discounts small
+        samples, not the raw percentage — a player who's cleared the line in their only 2 games
+        won't outrank one who's cleared it 6 of 8 times, even though both can show a high number.
       </p>
 
       {isLoading && (
@@ -129,7 +130,7 @@ export function HotBetsPage() {
 
       {!isLoading && !isError && confirmed.length > 0 && (
         <div className="grid gap-3 sm:grid-cols-2">
-          {confirmed.map(hb => <HotBetCard key={hb.estimate.propLineId} hb={hb} developing={false} />)}
+          {confirmed.map(hb => <HotBetCard key={`${hb.estimate.propLineId}-${hb.side}`} hb={hb} developing={false} />)}
         </div>
       )}
 
@@ -141,7 +142,7 @@ export function HotBetsPage() {
             worth watching, not yet worth trusting the way a Hot Bet is.
           </p>
           <div className="grid gap-3 sm:grid-cols-2">
-            {developing.map(hb => <HotBetCard key={hb.estimate.propLineId} hb={hb} developing />)}
+            {developing.map(hb => <HotBetCard key={`${hb.estimate.propLineId}-${hb.side}`} hb={hb} developing />)}
           </div>
         </div>
       )}

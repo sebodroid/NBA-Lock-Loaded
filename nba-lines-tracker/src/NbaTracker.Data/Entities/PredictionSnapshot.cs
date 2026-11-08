@@ -14,6 +14,7 @@ public class PredictionSnapshot
     public int GameId { get; set; }
     public int PlayerId { get; set; }
     public string MarketKey { get; set; } = null!;
+    public BetSide Side { get; set; }             // Over or Under — which direction this snapshot predicted
     public decimal Line { get; set; }
     public decimal ConfidencePct { get; set; }   // whatever headline number Hot Bets showed at the time
     public DateTime CreatedAt { get; set; }

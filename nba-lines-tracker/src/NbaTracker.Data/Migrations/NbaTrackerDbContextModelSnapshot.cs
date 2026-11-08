@@ -17,7 +17,7 @@ namespace NbaTracker.Data.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "9.0.21")
+                .HasAnnotation("ProductVersion", "9.0.19")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -577,6 +577,10 @@ namespace NbaTracker.Data.Migrations
                     b.Property<int>("PlayerId")
                         .HasColumnType("integer");
 
+                    b.Property<string>("Side")
+                        .IsRequired()
+                        .HasColumnType("text");
+
                     b.Property<string>("Sport")
                         .IsRequired()
                         .HasColumnType("text");
@@ -585,7 +589,7 @@ namespace NbaTracker.Data.Migrations
 
                     b.HasIndex("PlayerId");
 
-                    b.HasIndex("GameId", "PlayerId", "MarketKey")
+                    b.HasIndex("GameId", "PlayerId", "MarketKey", "Side")
                         .IsUnique();
 
                     b.ToTable("PredictionSnapshots");

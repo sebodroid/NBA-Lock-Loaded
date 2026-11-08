@@ -95,6 +95,20 @@ public record HotBetEntry(
     string GameLabel,
     string GameDate,
     PropEstimate Estimate,
+
+    // "Over" or "Under" — which direction this entry is recommending. Estimate's own
+    // fields (HitCount, HitRatePct, etc.) always describe the Over side of the history;
+    // for an Under entry, DisplayHitRatePct/DisplayHitCount below are the complement
+    // (games that stayed under), which is what should actually be shown to the user.
+    string Side,
+    decimal DisplayHitRatePct,
+    int DisplayHitCount,
+
+    // The Wilson lower-bound confidence actually used to rank/qualify this entry, for
+    // whichever side it is — exposed so downstream consumers (Parlays) don't have to
+    // re-derive it and risk getting the Over/Under complement wrong.
+    decimal ConfidencePct,
+
     string? InjuryStatus,
     string? InjuryNote
 );

@@ -59,11 +59,11 @@ public static class ParlayEndpoints
             .Where(c => c.Estimate.GamesWithData >= MinGamesForParlay)
             .Select(c => new ParlayLeg(
             "PlayerProp",
-            $"{c.PlayerName} Over {c.Estimate.Line} {c.Estimate.MarketLabel}",
+            $"{c.PlayerName} {c.Side} {c.Estimate.Line} {c.Estimate.MarketLabel}",
             c.GameId,
             c.GameLabel,
-            c.Estimate.EstimatedHitRatePct ?? c.Estimate.HitRatePct ?? 0m,
-            c.Estimate.OverOdds ?? -110,
+            c.ConfidencePct,
+            (c.Side == "Over" ? c.Estimate.OverOdds : c.Estimate.UnderOdds) ?? -110,
             c.PlayerId,
             c.Estimate.PropLineId
         ));

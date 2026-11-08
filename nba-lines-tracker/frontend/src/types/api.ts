@@ -258,6 +258,13 @@ export interface HotBetEntry {
   gameLabel: string
   gameDate: string
   estimate: PropEstimate
+  // "Over" or "Under". estimate's own hitCount/hitRatePct always describe the Over side
+  // of the history — for an Under entry, use displayHitRatePct/displayHitCount instead,
+  // which are already the complement (games that stayed under).
+  side: 'Over' | 'Under'
+  displayHitRatePct: number
+  displayHitCount: number
+  confidencePct: number
   injuryStatus: InjuryStatus
   injuryNote: string | null
 }

@@ -256,7 +256,15 @@ public class NbaTrackerDbContext : DbContext
             .OnDelete(DeleteBehavior.Restrict);
 
         modelBuilder.Entity<PredictionSnapshot>()
-            .HasIndex(p => new { p.GameId, p.PlayerId, p.MarketKey })
+            .Property(p => p.Side)
+            .HasConversion<string>();
+
+        // Side is part of the unique key, not just GameId/PlayerId/MarketKey — in principle
+        // (though essentially never in practice, since Over and Under confidence are near-
+        // complementary and rarely both clear the qualifying floor) the same prop could
+        // separately qualify as a confirmed Over snapshot and a confirmed Under snapshot.
+        modelBuilder.Entity<PredictionSnapshot>()
+            .HasIndex(p => new { p.GameId, p.PlayerId, p.MarketKey, p.Side })
             .IsUnique();
 
         // PlayerPropLineHistory — append-only, NOT unique on (GameId, PlayerId, MarketKey):
