@@ -43,7 +43,9 @@ public static class NflGameMatchingService
             ["Seattle Seahawks"]        = "SEA",
             ["Tampa Bay Buccaneers"]    = "TB",
             ["Tennessee Titans"]        = "TEN",
-            ["Washington Commanders"]   = "WAS",
+            // Highlightly uses "WSH", not the ESPN-style "WAS" — confirmed against the live
+            // Teams table (2026-11-08) after every Commanders game had silently gone unlined.
+            ["Washington Commanders"]   = "WSH",
         };
 
     public static string BuildCanonicalKey(string homeAbbr, string awayAbbr, DateOnly date)

@@ -45,7 +45,7 @@ public static class NflVenues
         ["SEA"] = new(47.5952m, -122.3316m, true),  // Lumen Field — mostly covered but open-air
         ["TB"]  = new(27.9759m, -82.5033m, true),   // Raymond James Stadium
         ["TEN"] = new(36.1665m, -86.7713m, true),   // Nissan Stadium
-        ["WAS"] = new(38.9077m, -76.8645m, true),   // Commanders Field (formerly FedExField)
+        ["WSH"] = new(38.9077m, -76.8645m, true),   // Commanders Field (formerly FedExField)
     };
 
     public static Venue? TryGetVenue(string teamAbbreviation) =>
