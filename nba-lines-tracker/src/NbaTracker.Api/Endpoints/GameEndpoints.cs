@@ -270,16 +270,13 @@ public static class GameEndpoints
         return Results.Ok(result);
     }
 
-    // Buckets a spread magnitude into the same coarse "how big a number is this" groups
-    // a bettor would actually think in — field-goal range, a possession-plus, or a
-    // double-digit blowout line. Shared by both BuildSeasonStats call sites so "today's
+    // A single cutoff rather than several narrow bands — three buckets (0-3, 3.5-6.5, 7+)
+    // sounded more precise but mostly produced "not enough games yet," since mid-season
+    // most teams simply haven't been a specific-sized favorite/dog often enough to clear
+    // a real sample in any one narrow band. One wider split actually has enough games in
+    // each side to say something. Shared by both BuildSeasonStats call sites so "today's
     // spread" and "a past game's spread" always land in the same bucket definition.
-    private static string SpreadBucket(decimal magnitude) => magnitude switch
-    {
-        <= 3m => "0-3",
-        <= 6.5m => "3.5-6.5",
-        _ => "7+"
-    };
+    private static string SpreadBucket(decimal magnitude) => magnitude >= 6m ? "6+" : "0-5.5";
 
     // Minimum games in the matched (role, bucket) group before showing a rate at all —
     // same reasoning as everywhere else tonight: a 2-0 record in a narrow bucket isn't a
