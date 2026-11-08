@@ -40,6 +40,13 @@ public record PropEstimate(
     // ratio his opponent's average allowed differs from the league average.
     decimal? EstimatedHitRatePct,
 
+    // Raw count backing EstimatedHitRatePct (EstimatedHitRatePct = EstimatedHitCount /
+    // GamesWithData) — exposed so callers ranking many props at once (HotBetsEndpoints)
+    // can compute a sample-size-aware confidence bound instead of trusting the point
+    // estimate alone. A 2-for-2 record and a 6-for-8 record can show the same-ish
+    // percentage but aren't equally trustworthy.
+    int? EstimatedHitCount,
+
     // Recent-form window (last 5 games played, regardless of statBasis) — a season-long
     // average can't see a role change, an injury return, or a defense's adjustment, so
     // this is shown alongside it rather than replacing it.

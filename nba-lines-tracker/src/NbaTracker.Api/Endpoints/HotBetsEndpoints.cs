@@ -24,9 +24,30 @@ public static class HotBetsEndpoints
     private const int MinRecentGamesForVeto = 3;
     private const decimal RecentFormVetoPct = 40m;
 
+    // z=1.96 ~ 95% confidence — the standard choice, not tuned for this app specifically.
+    private const double WilsonZ = 1.96;
+
     public static void Map(RouteGroupBuilder group)
     {
         group.MapGet("/", GetHotBetsAsync);
+    }
+
+    // Wilson score interval lower bound: a conservative, sample-size-aware read on "how
+    // often does this actually hit" instead of the raw hits/n percentage. A 2-for-2 record
+    // scores far lower here than an 8-for-8 one even though both show 100% raw — the fewer
+    // games observed, the more the true rate could plausibly be lower than what's been seen
+    // so far, and this discounts for that automatically rather than needing a hand-picked
+    // games-played cutoff. https://en.wikipedia.org/wiki/Binomial_proportion_confidence_interval
+    private static decimal WilsonLowerBoundPct(int hits, int n)
+    {
+        if (n <= 0) return 0m;
+        double p = (double)hits / n;
+        double z2 = WilsonZ * WilsonZ;
+        double denominator = 1 + z2 / n;
+        double center = p + z2 / (2 * n);
+        double margin = WilsonZ * Math.Sqrt(p * (1 - p) / n + z2 / (4.0 * n * n));
+        double lower = Math.Clamp((center - margin) / denominator, 0, 1);
+        return (decimal)(lower * 100);
     }
 
     // GET /api/{sport}/hot-bets?limit=10 — this week's best player-prop bets by estimated
@@ -94,8 +115,16 @@ public static class HotBetsEndpoints
                 line.Player, line, statsStart, db, ct, teamsById, leagueCache, statsCache);
             if (estimate.GamesWithData < PlayerEndpoints.MinGamesForEstimate) continue;
 
-            var pct = estimate.EstimatedHitRatePct ?? estimate.HitRatePct;
-            if (pct is null || pct < MinHitRatePct) continue;
+            // Confidence, not the raw point estimate, decides whether a prop qualifies and
+            // where it ranks — a 2-for-2 record and a 6-for-8 record can show a similar or
+            // even identical percentage, but they aren't equally trustworthy. The Wilson
+            // lower bound discounts small samples automatically instead of needing a
+            // hand-picked games-played cutoff, and it's what the "chance of hitting" number
+            // implicitly promises: a number you can actually act on, not just "hasn't missed
+            // yet in a tiny sample."
+            var hits = estimate.EstimatedHitCount ?? estimate.HitCount;
+            var confidence = WilsonLowerBoundPct(hits, estimate.GamesWithData);
+            if (confidence < MinHitRatePct) continue;
 
             // Veto: looks good on paper, but has gone cold recently — don't recommend it.
             if (estimate.RecentGamesWithData >= MinRecentGamesForVeto
@@ -126,7 +155,7 @@ public static class HotBetsEndpoints
         await SnapshotNewCandidatesAsync(sport, candidates, db, ct);
 
         return candidates
-            .OrderByDescending(c => c.Estimate.EstimatedHitRatePct ?? c.Estimate.HitRatePct)
+            .OrderByDescending(c => WilsonLowerBoundPct(c.Estimate.EstimatedHitCount ?? c.Estimate.HitCount, c.Estimate.GamesWithData))
             .ThenByDescending(c => c.Estimate.GamesWithData)
             .ToList();
     }

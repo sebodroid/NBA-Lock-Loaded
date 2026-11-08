@@ -166,7 +166,7 @@ public static class PlayerEndpoints
             return new PropEstimate(
                 line.Id, line.MarketKey, label, category, line.Line, line.OverOdds, line.UnderOdds,
                 line.Bookmaker, line.UnderBookmaker, opponentTeam?.Abbreviation ?? "?", "current",
-                0, null, 0, null, null, null, null, null, null, 0, null, null, null);
+                0, null, 0, null, null, null, null, null, null, null, 0, null, null, null);
         }
 
         var keyword = mapping.Keyword.ToLower();
@@ -302,7 +302,7 @@ public static class PlayerEndpoints
             return new PropEstimate(
                 line.Id, line.MarketKey, label, category, line.Line, line.OverOdds, line.UnderOdds,
                 line.Bookmaker, line.UnderBookmaker, "?", statBasis,
-                gamesWithData, seasonAverage, hitCount, hitRatePct, null, null, null, null, null,
+                gamesWithData, seasonAverage, hitCount, hitRatePct, null, null, null, null, null, null,
                 recentGamesWithData, recentHitRatePct, opportunityAvg, mapping.OpportunityLabel);
         }
 
@@ -335,21 +335,23 @@ public static class PlayerEndpoints
         int? teamsRanked = leagueCtx.TeamsRanked > 0 ? leagueCtx.TeamsRanked : null;
 
         decimal? estimatedHitRatePct = null;
+        int? estimatedHitCount = null;
         if (gamesWithData >= MinGamesForEstimate
             && opponentAllowedAverage.HasValue
             && leagueAllowedAverage is > 0)
         {
             var opponentFactor = opponentAllowedAverage.Value / leagueAllowedAverage.Value;
             var adjustedLine = opponentFactor > 0 ? line.Line / opponentFactor : line.Line;
-            int adjustedHitCount = playerPerGame.Count(x => x.Value > adjustedLine);
-            estimatedHitRatePct = Math.Round(100m * adjustedHitCount / gamesWithData, 1);
+            estimatedHitCount = playerPerGame.Count(x => x.Value > adjustedLine);
+            estimatedHitRatePct = Math.Round(100m * estimatedHitCount.Value / gamesWithData, 1);
         }
 
         return new PropEstimate(
             line.Id, line.MarketKey, label, category, line.Line, line.OverOdds, line.UnderOdds,
             line.Bookmaker, line.UnderBookmaker, opponentTeam.Abbreviation, statBasis,
             gamesWithData, seasonAverage, hitCount, hitRatePct,
-            opponentAllowedAverage, leagueAllowedAverage, opponentDefensiveRank, teamsRanked, estimatedHitRatePct,
+            opponentAllowedAverage, leagueAllowedAverage, opponentDefensiveRank, teamsRanked,
+            estimatedHitRatePct, estimatedHitCount,
             recentGamesWithData, recentHitRatePct, opportunityAvg, mapping.OpportunityLabel);
     }
 
