@@ -1,8 +1,11 @@
 # Required GitHub Actions secrets (Settings -> Secrets and variables -> Actions):
-# SERVER_HOST    — Hetzner server public IP address (e.g., 5.161.x.x)
-# SERVER_USER    — SSH login username (typically 'root')
-# SERVER_SSH_KEY — Full content of the SSH private key (including -----BEGIN/END lines)
-# GHCR_TOKEN     — GitHub PAT with read:packages scope (classic PAT, not fine-grained)
+# SERVER_HOST           — Hetzner server public IP address (e.g., 5.161.x.x)
+# SERVER_USER           — SSH login username (typically 'root')
+# SERVER_SSH_KEY        — Full content of the SSH private key (including -----BEGIN/END lines)
+# GHCR_TOKEN            — GitHub PAT with read:packages scope (classic PAT, not fine-grained)
+# CLOUDFLARE_API_TOKEN  — Cloudflare dashboard -> My Profile -> API Tokens -> Create Token,
+#                         "Edit Cloudflare Workers" template
+# CLOUDFLARE_ACCOUNT_ID — Cloudflare dashboard -> Workers & Pages -> Account ID (right sidebar)
 
 name: Build and Deploy
 
@@ -73,3 +76,34 @@ jobs:
             # needs one (its image/config didn't change, so compose wouldn't).
             docker compose -f docker-compose.prod.yml restart nginx
             docker image prune -f
+
+  # Independent of the backend jobs above — a frontend-only change (or a backend-only
+  # change) should deploy without waiting on or being blocked by the other side. Before
+  # this job existed, frontend changes only ever reached Cloudflare via someone manually
+  # running `wrangler deploy` from a laptop, so a push to master could sit live in git for
+  # days without ever actually being visible in the app.
+  deploy-frontend:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        working-directory: nba-lines-tracker/frontend
+        run: npm ci
+
+      - name: Build
+        working-directory: nba-lines-tracker/frontend
+        run: npm run build
+
+      - name: Deploy to Cloudflare Workers
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: nba-lines-tracker/frontend
+          command: deploy
