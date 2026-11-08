@@ -82,6 +82,7 @@ public static class HotBetsEndpoints
         // redundant full-league queries down to one per distinct market.
         var teamsById = await db.Teams.Where(t => t.Sport == sport).ToDictionaryAsync(t => t.Id, ct);
         var leagueCache = new Dictionary<string, PlayerEndpoints.LeagueAllowedContext>();
+        var statsCache = new Dictionary<string, Dictionary<int, List<(DateOnly GameDate, decimal Value)>>>();
 
         var candidates = new List<HotBetEntry>();
         foreach (var line in lines)
@@ -90,7 +91,7 @@ public static class HotBetsEndpoints
             if (IsOut(injury.Status)) continue;
 
             var estimate = await PlayerEndpoints.BuildPropEstimateAsync(
-                line.Player, line, statsStart, db, ct, teamsById, leagueCache);
+                line.Player, line, statsStart, db, ct, teamsById, leagueCache, statsCache);
             if (estimate.GamesWithData < PlayerEndpoints.MinGamesForEstimate) continue;
 
             var pct = estimate.EstimatedHitRatePct ?? estimate.HitRatePct;

@@ -135,7 +135,8 @@ public static class PlayerEndpoints
         NbaTrackerDbContext db,
         CancellationToken ct,
         Dictionary<int, Team>? teamsById = null,
-        Dictionary<string, LeagueAllowedContext>? leagueCache = null)
+        Dictionary<string, LeagueAllowedContext>? leagueCache = null,
+        Dictionary<string, Dictionary<int, List<(DateOnly GameDate, decimal Value)>>>? statsCache = null)
     {
         int? opponentTeamId = player.TeamId switch
         {
@@ -189,15 +190,33 @@ public static class PlayerEndpoints
 
         // Player's own per-game values, disambiguated per game by taking the largest
         // matching value (a real total like "yards" is reliably larger than a per-attempt
-        // average or a single-play long).
-        var currentPerGame = await PerGameValuesAsync(Scoped(false).Where(s => s.PlayerId == player.Id), exclude, ct);
+        // average or a single-play long). When statsCache is supplied (HotBetsEndpoints,
+        // scanning a whole week's slate), this pulls from one batched league-wide query
+        // per distinct market instead of issuing its own query per player per line — the
+        // same "compute once per market, not once per line" idea as leagueCache above,
+        // applied to the player's-own-history side of the computation.
+        async Task<List<(DateOnly GameDate, decimal Value)>> GetPlayerStatsAsync(bool prior)
+        {
+            if (statsCache is null)
+                return await PerGameValuesAsync(Scoped(prior).Where(s => s.PlayerId == player.Id), exclude, ct);
+
+            var cacheKey = $"{string.Join(',', mapping.StatCategories)}|{keyword}|{(prior ? "prior" : "current")}";
+            if (!statsCache.TryGetValue(cacheKey, out var byPlayer))
+            {
+                byPlayer = await BatchPerGameValuesAsync(Scoped(prior), exclude, ct);
+                statsCache[cacheKey] = byPlayer;
+            }
+            return byPlayer.TryGetValue(player.Id, out var vals) ? vals : [];
+        }
+
+        var currentPerGame = await GetPlayerStatsAsync(false);
 
         var playerPerGame = currentPerGame;
         var statBasis = "current";
         var usePrior = currentPerGame.Count < MinGamesForEstimate && priorSeason is not null;
         if (usePrior)
         {
-            var priorPerGame = await PerGameValuesAsync(Scoped(true).Where(s => s.PlayerId == player.Id), exclude, ct);
+            var priorPerGame = await GetPlayerStatsAsync(true);
             if (priorPerGame.Count > currentPerGame.Count)
             {
                 playerPerGame = priorPerGame;
@@ -389,6 +408,27 @@ public static class PlayerEndpoints
             .Select(g => (g.First().GameDate, g.Max(r => r.Value!.Value)))
             .OrderByDescending(x => x.GameDate)
             .ToList();
+    }
+
+    // Same disambiguation as PerGameValuesAsync, but for every player matching the query
+    // at once (no PlayerId filter) — one query covers every candidate line sharing this
+    // market+season-basis instead of one query each. See GetPlayerStatsAsync above.
+    private static async Task<Dictionary<int, List<(DateOnly GameDate, decimal Value)>>> BatchPerGameValuesAsync(
+        IQueryable<PlayerGameStat> query, string[] exclude, CancellationToken ct)
+    {
+        var rows = await query
+            .Select(s => new { s.PlayerId, s.GameId, s.Game.GameDate, s.StatName, s.Value })
+            .ToListAsync(ct);
+        return rows
+            .Where(r => !exclude.Any(x => r.StatName.ToLower().Contains(x)))
+            .GroupBy(r => r.PlayerId)
+            .ToDictionary(
+                pg => pg.Key,
+                pg => pg
+                    .GroupBy(r => r.GameId)
+                    .Select(g => (g.First().GameDate, g.Max(r => r.Value!.Value)))
+                    .OrderByDescending(x => x.GameDate)
+                    .ToList());
     }
 
     // GET /api/{sport}/leaderboards/{category} — season stat totals per player in one category.
