@@ -23,6 +23,10 @@ public static class PlayerEndpoints
     // play, garbage-time mop-up) rather than real passing history — see BuildPropEstimateAsync.
     private const decimal MinCompletionsForRealQbGame = 5m;
 
+    // Fewer games than this of current-season defensive data and the opponent is judged on
+    // last season instead — too thin a sample to rank a defense on this year's games alone.
+    private const int MinOpponentGamesForCurrentContext = 3;
+
     public static void Map(RouteGroupBuilder group)
     {
         group.MapGet("/{category}", GetLeaderboardAsync);
@@ -350,20 +354,31 @@ public static class PlayerEndpoints
                 recentGamesWithData, recentHitRatePct, opportunityAvg, mapping.OpportunityLabel);
         }
 
-        // League-wide context for this market+season-basis — what every team allows,
-        // relative to average. Shared across every prop line asking about the same
-        // market when a leagueCache is provided, since this side of the computation
-        // doesn't depend on the specific player or line, only the market.
-        var cacheKey = $"{string.Join(',', mapping.StatCategories)}|{keyword}|{statBasis}";
-        LeagueAllowedContext leagueCtx;
-        if (leagueCache is not null && leagueCache.TryGetValue(cacheKey, out var cachedCtx))
+        // League-wide context for this market — what every team allows, relative to
+        // average. Shared across every prop line asking about the same market when a
+        // leagueCache is provided, since this side of the computation doesn't depend on
+        // the specific player or line, only the market and season.
+        async Task<LeagueAllowedContext> LeagueContextAsync(bool prior)
         {
-            leagueCtx = cachedCtx;
+            var cacheKey = $"{string.Join(',', mapping.StatCategories)}|{keyword}|{(prior ? "prior" : "current")}";
+            if (leagueCache is not null && leagueCache.TryGetValue(cacheKey, out var cachedCtx))
+                return cachedCtx;
+            var ctx = await GetLeagueAllowedContextAsync(db, () => Scoped(prior), exclude, ct);
+            if (leagueCache is not null) leagueCache[cacheKey] = ctx;
+            return ctx;
         }
-        else
+
+        // The opponent's defense is judged on THIS season even when the player's own history
+        // had to fall back to last season — a backup QB's only real starts may be from 2025,
+        // but the defense he faces today is the 2026 one. Judging it on 2025 can flip the
+        // matchup entirely (a 25th-ranked pass defense this year read as 4th). Last season
+        // is only used when the opponent has too few games this season to rank at all.
+        var leagueCtx = await LeagueContextAsync(prior: false);
+        if (priorSeason is not null
+            && (!leagueCtx.AllowedByTeam.TryGetValue(opponentTeamId!.Value, out var currentOppGames)
+                || currentOppGames.Count < MinOpponentGamesForCurrentContext))
         {
-            leagueCtx = await GetLeagueAllowedContextAsync(db, () => Scoped(statBasis == "prior"), exclude, ct);
-            if (leagueCache is not null) leagueCache[cacheKey] = leagueCtx;
+            leagueCtx = await LeagueContextAsync(prior: true);
         }
 
         decimal? leagueAllowedAverage = leagueCtx.LeagueAllowedAverage;
