@@ -267,7 +267,7 @@ export function MatchupCard({ matchup }: MatchupCardProps) {
                 <td className="py-0.5 text-center"><AtsCell pct={homeAtsPct} /></td>
                 <td className="py-0.5 text-center"><AtsCell pct={awayAtsPct} /></td>
               </tr>
-              {(homeStats.similarSpreadLabel !== null || awayStats.similarSpreadLabel !== null) && (
+              {matchup.spreadLine !== null && (
                 <tr>
                   <td
                     className="py-0.5 text-muted-foreground"
@@ -283,7 +283,11 @@ export function MatchupCard({ matchup }: MatchupCardProps) {
                           {homeStats.similarSpreadAtsCovers}-{homeStats.similarSpreadAtsLosses} {homeStats.similarSpreadLabel}
                         </p>
                       </div>
-                    ) : <span className="text-muted-foreground text-[11px]">–</span>}
+                    ) : (
+                      <p className="text-[9px] text-muted-foreground italic leading-tight">
+                        not enough games yet
+                      </p>
+                    )}
                   </td>
                   <td className="py-0.5 text-center">
                     {awaySimPct !== null ? (
@@ -293,7 +297,11 @@ export function MatchupCard({ matchup }: MatchupCardProps) {
                           {awayStats.similarSpreadAtsCovers}-{awayStats.similarSpreadAtsLosses} {awayStats.similarSpreadLabel}
                         </p>
                       </div>
-                    ) : <span className="text-muted-foreground text-[11px]">–</span>}
+                    ) : (
+                      <p className="text-[9px] text-muted-foreground italic leading-tight">
+                        not enough games yet
+                      </p>
+                    )}
                   </td>
                 </tr>
               )}
