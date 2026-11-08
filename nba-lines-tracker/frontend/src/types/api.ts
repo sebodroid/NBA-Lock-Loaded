@@ -72,6 +72,12 @@ export interface TeamSeasonStats {
   ouPushes: number
   avgPointsScored: number
   avgPointsAllowed: number
+  // ATS record in past games where this team was the same role (favorite/underdog) and a
+  // similar spread size as today's matchup — null when there's no today's-game spread to
+  // compare against, or too few similar-sized games this season to mean anything.
+  similarSpreadAtsCovers: number | null
+  similarSpreadAtsLosses: number | null
+  similarSpreadLabel: string | null
 }
 
 export interface H2HGameEntry {

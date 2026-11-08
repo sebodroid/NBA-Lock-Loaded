@@ -38,6 +38,16 @@ function ouBadgeClass(result: string | null): string {
   return 'bg-muted text-muted-foreground border-0'
 }
 
+function similarSpreadPct(stats: {
+  similarSpreadAtsCovers: number | null
+  similarSpreadAtsLosses: number | null
+}): number | null {
+  if (stats.similarSpreadAtsCovers === null || stats.similarSpreadAtsLosses === null) return null
+  const total = stats.similarSpreadAtsCovers + stats.similarSpreadAtsLosses
+  if (total === 0) return null
+  return (stats.similarSpreadAtsCovers / total) * 100
+}
+
 function statusBadgeClass(status: string): string {
   if (status === 'LIVE')  return 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 border-0'
   if (status === 'FINAL') return 'bg-muted text-muted-foreground border-0'
@@ -112,6 +122,9 @@ export function MatchupCard({ matchup }: MatchupCardProps) {
   const homeOuPct  = calcOuPct(homeStats)
   const awayAtsPct = calcAtsPct(awayStats)
   const awayOuPct  = calcOuPct(awayStats)
+
+  const homeSimPct = similarSpreadPct(homeStats)
+  const awaySimPct = similarSpreadPct(awayStats)
 
   const favTeamAbbr = matchup.favoriteTeamId === matchup.homeTeamId
     ? matchup.homeTeamAbbr
@@ -254,6 +267,36 @@ export function MatchupCard({ matchup }: MatchupCardProps) {
                 <td className="py-0.5 text-center"><AtsCell pct={homeAtsPct} /></td>
                 <td className="py-0.5 text-center"><AtsCell pct={awayAtsPct} /></td>
               </tr>
+              {(homeStats.similarSpreadLabel !== null || awayStats.similarSpreadLabel !== null) && (
+                <tr>
+                  <td
+                    className="py-0.5 text-muted-foreground"
+                    title="ATS record in past games as the same role (favorite/underdog) and a similar spread size as today's line — a blanket season ATS% can hide a very different story at a specific spread size"
+                  >
+                    ATS (sim.)
+                  </td>
+                  <td className="py-0.5 text-center">
+                    {homeSimPct !== null ? (
+                      <div>
+                        <AtsCell pct={homeSimPct} />
+                        <p className="text-[9px] text-muted-foreground leading-tight">
+                          {homeStats.similarSpreadAtsCovers}-{homeStats.similarSpreadAtsLosses} {homeStats.similarSpreadLabel}
+                        </p>
+                      </div>
+                    ) : <span className="text-muted-foreground text-[11px]">–</span>}
+                  </td>
+                  <td className="py-0.5 text-center">
+                    {awaySimPct !== null ? (
+                      <div>
+                        <AtsCell pct={awaySimPct} />
+                        <p className="text-[9px] text-muted-foreground leading-tight">
+                          {awayStats.similarSpreadAtsCovers}-{awayStats.similarSpreadAtsLosses} {awayStats.similarSpreadLabel}
+                        </p>
+                      </div>
+                    ) : <span className="text-muted-foreground text-[11px]">–</span>}
+                  </td>
+                </tr>
+              )}
               <tr>
                 <td className="py-0.5 text-muted-foreground">O/U%</td>
                 <td className="py-0.5 text-center"><AtsCell pct={homeOuPct} /></td>

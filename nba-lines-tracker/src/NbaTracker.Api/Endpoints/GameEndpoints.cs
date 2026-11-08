@@ -213,13 +213,13 @@ public static class GameEndpoints
             var homeSeasonGames = seasonGames
                 .Where(g => g.HomeTeamId == homeId || g.AwayTeamId == homeId)
                 .ToList();
-            var homeStats = BuildSeasonStats(homeSeasonGames, homeId);
+            var homeStats = BuildSeasonStats(homeSeasonGames, homeId, game.GameLine?.Spread, game.GameLine?.FavoriteTeamId);
 
             // Season stats for away team
             var awaySeasonGames = seasonGames
                 .Where(g => g.HomeTeamId == awayId || g.AwayTeamId == awayId)
                 .ToList();
-            var awayStats = BuildSeasonStats(awaySeasonGames, awayId);
+            var awayStats = BuildSeasonStats(awaySeasonGames, awayId, game.GameLine?.Spread, game.GameLine?.FavoriteTeamId);
 
             // Head-to-head: all FINAL games between these two teams, this season plus the
             // prior one, newest first
@@ -270,7 +270,24 @@ public static class GameEndpoints
         return Results.Ok(result);
     }
 
-    private static TeamSeasonStats BuildSeasonStats(List<Game> games, int teamId)
+    // Buckets a spread magnitude into the same coarse "how big a number is this" groups
+    // a bettor would actually think in — field-goal range, a possession-plus, or a
+    // double-digit blowout line. Shared by both BuildSeasonStats call sites so "today's
+    // spread" and "a past game's spread" always land in the same bucket definition.
+    private static string SpreadBucket(decimal magnitude) => magnitude switch
+    {
+        <= 3m => "0-3",
+        <= 6.5m => "3.5-6.5",
+        _ => "7+"
+    };
+
+    // Minimum games in the matched (role, bucket) group before showing a rate at all —
+    // same reasoning as everywhere else tonight: a 2-0 record in a narrow bucket isn't a
+    // real signal, it's a coin flip that happened to land the same way twice.
+    private const int MinSimilarSpreadGames = 3;
+
+    private static TeamSeasonStats BuildSeasonStats(
+        List<Game> games, int teamId, decimal? todaySpread, int? todayFavoriteTeamId)
     {
         var homeGames = games.Where(g => g.HomeTeamId == teamId).ToList();
         var awayGames = games.Where(g => g.AwayTeamId == teamId).ToList();
@@ -300,12 +317,39 @@ public static class GameEndpoints
         decimal avgScored = scored.Count > 0 ? scored.Average() : 0m;
         decimal avgAllowed = allowed.Count > 0 ? allowed.Average() : 0m;
 
+        int? simCovers = null, simLosses = null;
+        string? simLabel = null;
+        if (todaySpread is decimal spread && todayFavoriteTeamId is int favId)
+        {
+            bool isFavoriteToday = favId == teamId;
+            var bucket = SpreadBucket(spread);
+
+            var similarGames = allGames.Where(g =>
+                g.GameLine?.Spread is decimal s
+                && g.GameLine?.FavoriteTeamId is int f
+                && (f == teamId) == isFavoriteToday
+                && SpreadBucket(s) == bucket
+            ).ToList();
+
+            if (similarGames.Count >= MinSimilarSpreadGames)
+            {
+                simCovers = similarGames.Count(g =>
+                    (g.HomeTeamId == teamId && g.GameResult?.HomeAtsResult == AtsResult.Cover)
+                    || (g.AwayTeamId == teamId && g.GameResult?.AwayAtsResult == AtsResult.Cover));
+                simLosses = similarGames.Count(g =>
+                    (g.HomeTeamId == teamId && g.GameResult?.HomeAtsResult == AtsResult.Loss)
+                    || (g.AwayTeamId == teamId && g.GameResult?.AwayAtsResult == AtsResult.Loss));
+                simLabel = $"{(isFavoriteToday ? "favored" : "underdog")} by {bucket}";
+            }
+        }
+
         return new TeamSeasonStats(
             homeGames.Count + awayGames.Count,
             wins, losses,
             atsCovers, atsLosses, atsPushes,
             ouOvers, ouUnders, ouPushes,
-            avgScored, avgAllowed
+            avgScored, avgAllowed,
+            simCovers, simLosses, simLabel
         );
     }
 }

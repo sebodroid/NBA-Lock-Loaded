@@ -11,7 +11,18 @@ public record TeamSeasonStats(
     int OuUnders,
     int OuPushes,
     decimal AvgPointsScored,
-    decimal AvgPointsAllowed
+    decimal AvgPointsAllowed,
+
+    // ATS record specifically in past games where this team was on the SAME side
+    // (favorite/underdog) as they are in today's matchup, AND the spread was a similar
+    // size (same magnitude bucket — see SpreadBucket in GameEndpoints). A team's blanket
+    // season ATS% can hide a very different story at a specific spread size — a team
+    // that covers well as a short favorite isn't necessarily the same team as a
+    // double-digit favorite. Null when there's no today's-game spread to compare against,
+    // or too few similar-sized games this season to say anything meaningful.
+    int? SimilarSpreadAtsCovers,
+    int? SimilarSpreadAtsLosses,
+    string? SimilarSpreadLabel   // e.g. "favored by 7+" — describes the matched bucket
 );
 
 public record H2HGameEntry(
