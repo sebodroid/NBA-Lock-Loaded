@@ -136,6 +136,11 @@ public static class HotBetsEndpoints
             HotBetEntry? BuildEntry(string side)
             {
                 var isOver = side == "Over";
+
+                // Only recommend a side a sportsbook actually offers — Anytime TD (and often
+                // sacks) is posted "Yes"-only, so its Under has no price and can't be bet.
+                if ((isOver ? estimate.OverOdds : estimate.UnderOdds) is null) return null;
+
                 decimal? pct = isOver ? overPct : overPct is decimal op ? 100m - op : null;
                 if (pct is null || pct < MinHitRatePct) return null;
 
