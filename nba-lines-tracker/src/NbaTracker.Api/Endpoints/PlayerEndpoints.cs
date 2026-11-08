@@ -19,6 +19,10 @@ public static class PlayerEndpoints
     // season-long hit rate — see BuildPropEstimateAsync.
     private const int RecentGamesWindow = 5;
 
+    // Below this many completions, a QB's game is treated as a cameo (kneel-downs, a trick
+    // play, garbage-time mop-up) rather than real passing history — see BuildPropEstimateAsync.
+    private const decimal MinCompletionsForRealQbGame = 5m;
+
     public static void Map(RouteGroupBuilder group)
     {
         group.MapGet("/{category}", GetLeaderboardAsync);
@@ -209,14 +213,54 @@ public static class PlayerEndpoints
             return byPlayer.TryGetValue(player.Id, out var vals) ? vals : [];
         }
 
-        var currentPerGame = await GetPlayerStatsAsync(false);
+        // Passing markets only count games where the player actually played QB. A backup's
+        // kneel-down series or a one-throw trick play is a real box-score row, but counting
+        // "1 passing yard" as a game of history makes a backup starting today look like an
+        // 0-for-N disaster instead of what it really is: no meaningful history at all.
+        var isPassingMarket = mapping.StatCategories.Contains("Passing");
+
+        async Task<HashSet<DateOnly>> RealQbGameDatesAsync(bool prior)
+        {
+            var comp = PropMarketMapping.TryGetMapping("player_pass_completions")!;
+            var compKeyword = comp.Keyword.ToLower();
+            var q = db.PlayerGameStats.Where(s =>
+                s.Category == "Passing" && s.StatName.ToLower().Contains(compKeyword) && s.Value.HasValue);
+            q = prior ? q.Where(s => s.Game.Season == priorSeason) : q.Where(s => s.Game.GameDate >= statsStart);
+
+            List<(DateOnly GameDate, decimal Value)> completions;
+            if (statsCache is null)
+            {
+                completions = await PerGameValuesAsync(q.Where(s => s.PlayerId == player.Id), comp.Exclude, ct);
+            }
+            else
+            {
+                var key = $"qb-games|{(prior ? "prior" : "current")}";
+                if (!statsCache.TryGetValue(key, out var byPlayer))
+                {
+                    byPlayer = await BatchPerGameValuesAsync(q, comp.Exclude, ct);
+                    statsCache[key] = byPlayer;
+                }
+                completions = byPlayer.TryGetValue(player.Id, out var v) ? v : [];
+            }
+            return completions.Where(c => c.Value >= MinCompletionsForRealQbGame).Select(c => c.GameDate).ToHashSet();
+        }
+
+        async Task<List<(DateOnly GameDate, decimal Value)>> GetRealGamesAsync(bool prior)
+        {
+            var games = await GetPlayerStatsAsync(prior);
+            if (!isPassingMarket) return games;
+            var realDates = await RealQbGameDatesAsync(prior);
+            return games.Where(g => realDates.Contains(g.GameDate)).ToList();
+        }
+
+        var currentPerGame = await GetRealGamesAsync(false);
 
         var playerPerGame = currentPerGame;
         var statBasis = "current";
         var usePrior = currentPerGame.Count < MinGamesForEstimate && priorSeason is not null;
         if (usePrior)
         {
-            var priorPerGame = await GetPlayerStatsAsync(true);
+            var priorPerGame = await GetRealGamesAsync(true);
             if (priorPerGame.Count > currentPerGame.Count)
             {
                 playerPerGame = priorPerGame;
