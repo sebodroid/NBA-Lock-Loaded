@@ -252,16 +252,40 @@ public static class PlayerEndpoints
             foreach (var (oppCategory, oppKeywordRaw) in mapping.OpportunityComponents)
             {
                 var oppKeyword = oppKeywordRaw.ToLower();
-                var oppQuery = db.PlayerGameStats.Where(s =>
-                    s.PlayerId == player.Id
-                    && s.Category == oppCategory
-                    && s.StatName.ToLower().Contains(oppKeyword)
-                    && s.Value.HasValue);
-                oppQuery = usePrior
-                    ? oppQuery.Where(s => s.Game.Season == priorSeason)
-                    : oppQuery.Where(s => s.Game.GameDate >= statsStart);
 
-                var oppPerGame = await PerGameValuesAsync(oppQuery, [], ct);
+                List<(DateOnly GameDate, decimal Value)> oppPerGame;
+                if (statsCache is null)
+                {
+                    var oppQuery = db.PlayerGameStats.Where(s =>
+                        s.PlayerId == player.Id
+                        && s.Category == oppCategory
+                        && s.StatName.ToLower().Contains(oppKeyword)
+                        && s.Value.HasValue);
+                    oppQuery = usePrior
+                        ? oppQuery.Where(s => s.Game.Season == priorSeason)
+                        : oppQuery.Where(s => s.Game.GameDate >= statsStart);
+
+                    oppPerGame = await PerGameValuesAsync(oppQuery, [], ct);
+                }
+                else
+                {
+                    var oppCacheKey = $"opp:{oppCategory}|{oppKeyword}|{(usePrior ? "prior" : "current")}";
+                    if (!statsCache.TryGetValue(oppCacheKey, out var byPlayer))
+                    {
+                        var oppQuery = db.PlayerGameStats.Where(s =>
+                            s.Category == oppCategory
+                            && s.StatName.ToLower().Contains(oppKeyword)
+                            && s.Value.HasValue);
+                        oppQuery = usePrior
+                            ? oppQuery.Where(s => s.Game.Season == priorSeason)
+                            : oppQuery.Where(s => s.Game.GameDate >= statsStart);
+
+                        byPlayer = await BatchPerGameValuesAsync(oppQuery, [], ct);
+                        statsCache[oppCacheKey] = byPlayer;
+                    }
+                    oppPerGame = byPlayer.TryGetValue(player.Id, out var vals) ? vals : [];
+                }
+
                 if (oppPerGame.Count > 0)
                 {
                     componentSum += oppPerGame.Average(x => x.Value);
