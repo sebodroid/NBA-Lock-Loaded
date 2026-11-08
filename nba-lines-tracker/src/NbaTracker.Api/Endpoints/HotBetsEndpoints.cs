@@ -62,15 +62,25 @@ public static class HotBetsEndpoints
 
         limit = Math.Clamp(limit, 1, 25);
 
-        var ranked = await GetRankedCandidatesAsync(sport, db, ct);
-        return Results.Ok(ranked.Take(limit).ToList());
+        var (confirmed, developing) = await GetCandidatePoolsAsync(sport, db, ct);
+        return Results.Ok(new HotBetsResponse(
+            confirmed.Take(limit).ToList(),
+            developing.Take(limit).ToList()));
     }
 
-    // Internal, not private — ParlayEndpoints reuses the exact same ranked/vetted pool
-    // of player props (same hit-rate floor, same recent-form and opportunity vetoes) as
-    // raw material for parlay legs, rather than re-deriving a separate, possibly
-    // inconsistent notion of "a good prop bet."
+    // Internal, not private — ParlayEndpoints reuses the exact same confirmed/vetted pool
+    // of player props (same hit-rate floor, confidence bound, recent-form and opportunity
+    // vetoes) as raw material for parlay legs, rather than re-deriving a separate, possibly
+    // inconsistent notion of "a good prop bet." Parlays only ever see Confirmed — stacking
+    // several small-sample Developing picks together would compound unreliable signals.
     internal static async Task<List<HotBetEntry>> GetRankedCandidatesAsync(
+        string sport, NbaTrackerDbContext db, CancellationToken ct)
+    {
+        var (confirmed, _) = await GetCandidatePoolsAsync(sport, db, ct);
+        return confirmed;
+    }
+
+    private static async Task<(List<HotBetEntry> Confirmed, List<HotBetEntry> Developing)> GetCandidatePoolsAsync(
         string sport, NbaTrackerDbContext db, CancellationToken ct)
     {
         var today = ApiClock.Today;
@@ -105,7 +115,8 @@ public static class HotBetsEndpoints
         var leagueCache = new Dictionary<string, PlayerEndpoints.LeagueAllowedContext>();
         var statsCache = new Dictionary<string, Dictionary<int, List<(DateOnly GameDate, decimal Value)>>>();
 
-        var candidates = new List<HotBetEntry>();
+        var confirmed = new List<HotBetEntry>();
+        var developing = new List<HotBetEntry>();
         foreach (var line in lines)
         {
             injuries.TryGetValue(line.PlayerId, out var injury);
@@ -115,16 +126,8 @@ public static class HotBetsEndpoints
                 line.Player, line, statsStart, db, ct, teamsById, leagueCache, statsCache);
             if (estimate.GamesWithData < PlayerEndpoints.MinGamesForEstimate) continue;
 
-            // Confidence, not the raw point estimate, decides whether a prop qualifies and
-            // where it ranks — a 2-for-2 record and a 6-for-8 record can show a similar or
-            // even identical percentage, but they aren't equally trustworthy. The Wilson
-            // lower bound discounts small samples automatically instead of needing a
-            // hand-picked games-played cutoff, and it's what the "chance of hitting" number
-            // implicitly promises: a number you can actually act on, not just "hasn't missed
-            // yet in a tiny sample."
-            var hits = estimate.EstimatedHitCount ?? estimate.HitCount;
-            var confidence = WilsonLowerBoundPct(hits, estimate.GamesWithData);
-            if (confidence < MinHitRatePct) continue;
+            var pct = estimate.EstimatedHitRatePct ?? estimate.HitRatePct;
+            if (pct is null || pct < MinHitRatePct) continue;
 
             // Veto: looks good on paper, but has gone cold recently — don't recommend it.
             if (estimate.RecentGamesWithData >= MinRecentGamesForVeto
@@ -139,7 +142,7 @@ public static class HotBetsEndpoints
                 && estimate.OpportunityAvg is not null
                 && estimate.OpportunityAvg < opportunityFloor) continue;
 
-            candidates.Add(new HotBetEntry(
+            var entry = new HotBetEntry(
                 line.Player.Id,
                 line.Player.Name,
                 line.Player.Team?.Abbreviation,
@@ -149,15 +152,31 @@ public static class HotBetsEndpoints
                 estimate,
                 injury.Status,
                 injury.Note
-            ));
+            );
+
+            // Confidence, not the raw point estimate, decides which bucket a prop lands
+            // in — a 2-for-2 record and a 6-for-8 record can show a similar or even
+            // identical percentage, but they aren't equally trustworthy. The Wilson lower
+            // bound discounts small samples automatically instead of needing a
+            // hand-picked games-played cutoff, and it's what "chance of hitting" implicitly
+            // promises: a number you can act on, not just "hasn't missed yet in a tiny
+            // sample." A pick that clears the point-estimate floor but not this bound still
+            // has real signal worth surfacing — it just goes to Developing, not dropped.
+            var hits = estimate.EstimatedHitCount ?? estimate.HitCount;
+            var confidence = WilsonLowerBoundPct(hits, estimate.GamesWithData);
+            (confidence >= MinHitRatePct ? confirmed : developing).Add(entry);
         }
 
-        await SnapshotNewCandidatesAsync(sport, candidates, db, ct);
+        // Accuracy tracking only grades Confirmed picks — Developing is a UI-only surface
+        // for "worth watching," not a prediction the system is standing behind yet.
+        await SnapshotNewCandidatesAsync(sport, confirmed, db, ct);
 
-        return candidates
+        List<HotBetEntry> RankedBy(List<HotBetEntry> list) => list
             .OrderByDescending(c => WilsonLowerBoundPct(c.Estimate.EstimatedHitCount ?? c.Estimate.HitCount, c.Estimate.GamesWithData))
             .ThenByDescending(c => c.Estimate.GamesWithData)
             .ToList();
+
+        return (RankedBy(confirmed), RankedBy(developing));
     }
 
     // Records the FIRST time each (Game, Player, Market) ever qualified as a Hot Bet —

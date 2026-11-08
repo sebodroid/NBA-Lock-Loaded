@@ -156,6 +156,7 @@ export interface PropEstimate {
   opponentDefensiveRank: number | null   // 1 = allows the fewest (toughest defense) in this stat
   teamsRanked: number | null             // how many teams opponentDefensiveRank is out of
   estimatedHitRatePct: number | null
+  estimatedHitCount: number | null  // raw count behind estimatedHitRatePct
   recentGamesWithData: number       // last-5-games window, independent of statBasis
   recentHitRatePct: number | null
   opportunityAvg: number | null     // targets/gm or rush att/gm — null when not tracked for this market
@@ -259,6 +260,14 @@ export interface HotBetEntry {
   estimate: PropEstimate
   injuryStatus: InjuryStatus
   injuryNote: string | null
+}
+
+// confirmed: cleared the confidence bound, the trustworthy pool. developing: a strong
+// point estimate but not enough games yet to clear that bound — real signal worth
+// watching, just not backed by enough history to act on yet.
+export interface HotBetsResponse {
+  confirmed: HotBetEntry[]
+  developing: HotBetEntry[]
 }
 
 export interface ParlayLeg {

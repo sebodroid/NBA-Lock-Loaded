@@ -98,3 +98,9 @@ public record HotBetEntry(
     string? InjuryStatus,
     string? InjuryNote
 );
+
+// Confirmed: cleared the sample-size-aware confidence bound, the trustworthy pool used
+// for grading/accuracy tracking and parlay legs. Developing: a strong point estimate but
+// not enough games yet to clear that bound — shown separately rather than silently
+// dropped, so "too early to tell" reads differently than "checked and it's not good."
+public record HotBetsResponse(List<HotBetEntry> Confirmed, List<HotBetEntry> Developing);
